@@ -1,15 +1,16 @@
 import type { Knex } from "knex";
 import { config } from "./env";
 
+
 const knexConfig:Knex.Config={
     client:"pg",
     migrations:{
         extension:"ts",
-        directory:"../db/migrations"
+        directory:"src/db/migrations"
     },
     seeds:{
         extension:"ts",
-        directory:"../db/seeds"
+        directory:"src/db/seeds"
     }
 }
 
