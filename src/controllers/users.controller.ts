@@ -2,9 +2,10 @@ import { Request, Response } from "express";
 import UserService from "../services/users.service";
 import bcrypt from "bcrypt";
 import { User } from "../services/users.service";
+import { generateToken,comparePasswords,hashPassword } from "../utils/auth";
 
 class UserController {
-  createUser = async (req: Request, res: Response) => {
+  register = async (req: Request, res: Response) => {
     const { name, email, password, role } = req.body;
     if (!name || !email || !password) {
       return res
@@ -12,19 +13,42 @@ class UserController {
         .json({ error: "Name, email and password are required" });
     }
     try {
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await hashPassword(password);
       const user = await UserService.createUser({
         name,
         email,
         password_hash: hashedPassword,
         role,
       });
-      res.status(201).json({ message: "User created successfully", user });
+      const token = generateToken({ id: user.id, role: user.role });
+      res.status(201).json({ message: "User created successfully", user, token });
     } catch (error) {
       console.error("Error creating user:", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
   };
+
+  login = async (req: Request, res: Response) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+    try {
+      const user = await UserService.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+      const isValidPassword = await comparePasswords(password, user.password_hash);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+      const token = generateToken({ id: user.id, role: user.role });
+      res.status(200).json({ message: "Login successful", token });
+    } catch (error) {
+      console.error("Error logging in:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  }
 
   getAllUsers = async (req: Request, res: Response) => {
     try {

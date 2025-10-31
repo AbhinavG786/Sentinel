@@ -46,6 +46,14 @@ class UserService {
   deleteUser = async (id: string) => {
     return await db("users").where({ id }).del();
   };
+
+  getUserByEmail = async (email: string) => {
+    return await db("users")
+      .select("id", "role", "password_hash")
+      .where({ email })
+      .first();
+  };
+
 }
 
 export default new UserService();
