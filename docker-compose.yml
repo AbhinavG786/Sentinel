@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build: ./src/gateway
+    ports:
+      - "3000:3000"
+    depends_on:
+      - incident-service
+      - firewall-service
+      - kafka
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKER=kafka:9092
+
+  incident-service:
+    build: ./src/services/incident-service
+    ports:
+      - "4001:4001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:sunil786@postgres:5432/incidents
+      - KAFKA_BROKER=kafka:9092
+
+  firewall-service:
+    build: ./src/services/firewall-service
+    ports:
+      - "4002:4002"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - KAFKA_BROKER=kafka:9092
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: sunil786
+    ports:
+      - "5432:5432"

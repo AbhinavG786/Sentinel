@@ -1,12 +1,20 @@
 {
-  "name": "industryops",
+  "private": true,
+  "workspaces": [
+    "src/services/*",
+    "packages/*"
+  ],
+  "name": "sentinel",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc",
-    "dev": "node dist/index.js",
+    "build": "tsc -b",
+    "dev": "concurrently \"npm run dev:gateway\" \"npm run dev:users\" \"npm run dev:incidents\"",
+    "dev:gateway": "ts-node src/gateway/index.ts",
+    "dev:users": "ts-node src/services/user-service/index.ts",
+    "dev:incidents": "ts-node src/services/incident-service/index.ts",
     "migrate:latest": "knex --knexfile knexfile.ts migrate:latest",
     "migrate:rollback": "knex --knexfile knexfile.ts migrate:rollback",
     "seed:run": "knex --knexfile knexfile.ts seed:run"
@@ -35,6 +43,7 @@
     "express": "^5.1.0",
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
+    "kafkajs": "^2.2.4",
     "knex": "^3.1.0",
     "pg": "^8.16.3"
   }

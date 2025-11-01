@@ -2,3 +2,14 @@
 /dist
 /.env
 knexfile.cjs
+/packages/*/node_modules
+/packages/*/dist
+src/services/firewall-service/node_modules
+src/services/firewall-service/dist
+src/services/incident-service/node_modules
+src/services/incident-service/dist
+src/services/user-service/node_modules
+src/services/user-service/dist
+src/gateway/node_modules
+src/gateway/dist
+

@@ -1,9 +1,11 @@
 {
+  "extends": "../../../tsconfig.json",
   "compilerOptions": {
     "target": "ES2020",
     "module": "CommonJS",
     "lib": ["ES2020"],
     "outDir": "dist",
+    "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "moduleResolution": "node",
@@ -11,14 +13,10 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
-    "typeRoots": ["./node_modules/@types", "./types"],
-    "paths": {
-      "shared-utils/*": ["packages/shared-utils/src/*"]
-    },
+    "typeRoots": ["./node_modules/@types", "./types"]
   },
   "include": [
-    "src",
+    "src/**/*",
     "types",
     "src/firebase",
     "packages/shared-utils/src/kafka.ts",
@@ -26,5 +24,5 @@
     "packages/shared-utils/src/env.ts",
     "packages/shared-utils/src/knexFile.ts"
   ],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist"],
 }
