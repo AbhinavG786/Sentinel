@@ -15,7 +15,7 @@
     "typeRoots": ["./node_modules/@types", "./types"],
     "paths": {
       "shared-utils/*": ["packages/shared-utils/src/*"]
-    },
+    }
   },
   "include": [
     "src",
@@ -24,7 +24,8 @@
     "packages/shared-utils/src/kafka.ts",
     "packages/shared-utils/src/redisClient.ts",
     "packages/shared-utils/src/env.ts",
-    "packages/shared-utils/src/knexFile.ts"
+    "packages/shared-utils/src/knexFile.ts",
+    "packages/shared-utils/src/db"
   ],
   "exclude": ["node_modules", "dist"]
 }

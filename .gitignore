@@ -12,4 +12,4 @@ src/services/user-service/node_modules
 src/services/user-service/dist
 src/gateway/node_modules
 src/gateway/dist
-
+ownership.txt
