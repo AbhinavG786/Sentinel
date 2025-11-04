@@ -2,18 +2,15 @@ import kafka from "shared-utils/src/kafka";
 import axios from "axios";
 import { Consumer } from "kafkajs";
 import { Producer } from "kafkajs";
-import {sanitizeIncidentData} from "shared-utils/src/sanitizeIncidentData";
 import {db} from "shared-utils/src/db/knex"
+import {IncidentCreatedEvent} from "shared-utils/src/types"
+import { sanitizeLogs } from "shared-utils//src/sanitizeLogs";
 
 const producer: Producer = kafka.producer();
 
 const consumer: Consumer = kafka.consumer({ groupId: "firewall-analyzer" });
 
-export const initConsumer = async () => {
-  await consumer.connect();
-  console.log("Kafka Consumer connected");
-  await producer.connect();
-  console.log("Kafka Producer connected");
+export const readIncident = async () => {
   await consumer.subscribe({ topic: "incident-events", fromBeginning: false });
 
   await consumer.run({
@@ -24,9 +21,9 @@ export const initConsumer = async () => {
       const incident = JSON.parse(message.value.toString());
       console.log("Received incident event for sanitization:", incident.title);
 
-      const sanitizedIncident = await sanitizeIncidentData(db, incident);
+      const sanitizedIncident = await sanitizeLogs(db, incident);
       try {
-        const analysis = await axios.post("http://localhost:4002/analyze", {
+        const analysis = await axios.post("http://localhost:4002/api/analyze", {
           incident: sanitizedIncident,
         });
           //  const summary = analysis.data.summary;
