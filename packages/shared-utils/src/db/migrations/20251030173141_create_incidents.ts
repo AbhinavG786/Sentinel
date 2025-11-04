@@ -5,6 +5,10 @@ export async function up(knex: Knex): Promise<void> {
     await knex.raw(`
         CREATE TABLE IF NOT EXISTS incidents(
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        temp_id UUID UNIQUE NOT NULL,
+        trace_id UUID NOT NULL,
+        source VARCHAR(255) NOT NULL,
+        sanitized_snippet JSONB NOT NULL,
         title VARCHAR(255) NOT NULL,
         description TEXT,
         severity VARCHAR(20) CHECK (severity IN ('low','medium','high','critical')) DEFAULT 'low',

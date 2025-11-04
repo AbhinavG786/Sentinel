@@ -21,12 +21,12 @@ const staticPatterns = [
   },
 ];
 
-export async function sanitizeIncidentData(
+export async function sanitizeLogs(
   db: Knex,
-  incident: any,
+  logs: any,
   userId?: string
 ) {
-  let sanitized = JSON.parse(JSON.stringify(incident));
+  let sanitized = JSON.parse(JSON.stringify(logs));
   let dataString = JSON.stringify(sanitized);
   const triggeredPolicies: any[] = [];
 
@@ -74,20 +74,20 @@ export async function sanitizeIncidentData(
 
     if (matched) {
       // Record event in system_events
-      await db("system_events").insert({
-        event_type: "POLICY_TRIGGERED",
-        source: "firewall_sanitization",
-        payload: JSON.stringify({
-          policy_id: policy.id,
-          incident_id: incident.id,
-          user_id: userId || null,
-        }),
-      });
+      // await db("system_events").insert({
+      //   event_type: "POLICY_TRIGGERED",
+      //   source: "firewall_sanitization",
+      //   payload: JSON.stringify({
+      //     policy_id: policy.id,
+      //     incident_id: incident.id,
+      //     user_id: userId || null,
+      //   }),
+      // });
 
       // Record detailed policy log
       await db("policy_logs").insert({
         user_id: userId || null,
-        incident_id: incident.id,
+        incident_id: null,
         policy_id: policy.id,
         detected_violation: triggeredPolicies.map((p) => p.keyword).join(", "),
         ai_response_snippet: dataString.slice(0, 500),
@@ -95,12 +95,12 @@ export async function sanitizeIncidentData(
       });
 
       // Create alert (optional)
-      await db("alerts").insert({
-        incident_id: incident.id,
-        triggered_by: userId || null,
-        message: `Policy "${policy.name}" triggered on incident ${incident.id}`,
-        severity: "medium",
-      });
+      // await db("alerts").insert({
+      //   incident_id: incident.id,
+      //   triggered_by: userId || null,
+      //   message: `Policy "${policy.name}" triggered on incident ${incident.id}`,
+      //   severity: "medium",
+      // });
     }
   }
 
