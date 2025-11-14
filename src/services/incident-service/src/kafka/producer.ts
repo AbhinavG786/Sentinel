@@ -12,7 +12,7 @@ export const initProducer = async () => {
 export const sendIncidentEvent = async (incident: Incident) => {
   try {
     await producer.send({
-      topic: "incident-events",
+      topic: "incident.created",
       messages: [
         {
           key: "incident.created",

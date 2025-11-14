@@ -1,10 +1,10 @@
-import {Request,Response} from 'express'
+import { Request, Response } from "express";
 import { Type, GoogleGenAI } from "@google/genai";
 const ai = new GoogleGenAI({
   apiKey: process.env.GOOGLE_GENAI_API_KEY || "",
 });
 
-const analyzeIncident= async (req: Request, res: Response) => {
+const analyzeIncident = async (req: Request, res: Response) => {
   const { incident } = req.body;
 
   // const prompt = `
@@ -30,34 +30,39 @@ const analyzeIncident= async (req: Request, res: Response) => {
   `;
 
   try {
-   const response: any = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
+    const response: any = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
           properties: {
             summary: {
               type: Type.STRING,
             },
-            root_cause: {    
-                type: Type.STRING,
+            root_cause: {
+              type: Type.STRING,
             },
             resolution: {
-                type: Type.STRING,
+              type: Type.STRING,
             },
-          confidence: {
+            confidence: {
               type: Type.NUMBER,
+            },
           },
-        },
-         required: ["summary", "root_cause", "resolution", "confidence"],
-          propertyOrdering: ["summary", "root_cause", "resolution", "confidence"],
+          required: ["summary", "root_cause", "resolution", "confidence"],
+          propertyOrdering: [
+            "summary",
+            "root_cause",
+            "resolution",
+            "confidence",
+          ],
         },
       },
-  });
+    });
 
-  console.log(JSON.parse(response.text));
+    console.log(JSON.parse(response.text));
     res.json({ result: JSON.parse(response.text) });
   } catch (error: any) {
     console.error("AI Error:", error.message);

@@ -2,7 +2,7 @@ export interface IncidentCreatedEvent {
   tempId: string;
   traceId: string;
   source: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: "low" | "medium" | "high" | "critical";
   sanitizedSnippet: string;
   sanitizedPayloadRef?: string;
   timestamp: string;
