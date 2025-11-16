@@ -1,10 +1,10 @@
 import { initKafka } from "./kafka/kafka";
-import { startAuditConsumer } from "./kafka/consumer";
+import { startAuditAlertConsumers } from "./kafka/consumer";
 
 (async () => {
   await initKafka();
-  await startAuditConsumer();
+  await startAuditAlertConsumers();
   console.log(
-    "Audit Service consuming audit.event"
+    "Audit Service consuming audit.event and alert.created"
   );
 })();

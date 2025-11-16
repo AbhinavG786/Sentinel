@@ -1,5 +1,5 @@
 import { db } from "shared-utils/src/db/knex";
-import { producer, consumer } from "./kafka";
+import { producer, consumer1,consumer2 } from "./kafka";
 import {
   IncidentCreatedEvent,
   IncidentStoredEvent,
@@ -8,12 +8,12 @@ import {
 import { v4 as uuidv4 } from "uuid";
 
 export const startAIUpdateConsumer = async () => {
-  await consumer.subscribe({
+  await consumer2.subscribe({
     topic: "incident.analyzed",
   });
   console.log("Incident service now listening for AI results");
 
-  await consumer.run({
+  await consumer2.run({
     eachMessage: async ({ message }) => {
       if (message.key?.toString() !== "incident.analyzed" || !message.value)
         return;
@@ -74,9 +74,9 @@ export const startAIUpdateConsumer = async () => {
 };
 
 export const consumeIncidentCreatedEvent = async () => {
-  await consumer.subscribe({ topic: "incident.created", fromBeginning: false });
+  await consumer1.subscribe({ topic: "incident.created", fromBeginning: false });
 
-  await consumer.run({
+  await consumer1.run({
     eachMessage: async ({ topic, partition, message }) => {
       if (message.key?.toString() !== "incident.created" || !message.value) {
         return;
