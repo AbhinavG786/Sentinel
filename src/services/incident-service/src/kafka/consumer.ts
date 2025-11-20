@@ -1,10 +1,10 @@
-import { db } from "shared-utils/src/db/knex";
+import { db } from "@shared/utils/src/db/knex";
 import { producer, consumer1,consumer2 } from "./kafka";
 import {
   IncidentCreatedEvent,
   IncidentStoredEvent,
   IncidentAnalyzedEvent,
-} from "shared-utils/src/types";
+} from "@shared/utils/src/types";
 import { v4 as uuidv4 } from "uuid";
 
 export const startAIUpdateConsumer = async () => {

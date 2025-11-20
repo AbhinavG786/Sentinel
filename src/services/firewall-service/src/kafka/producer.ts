@@ -1,7 +1,7 @@
-import {sanitizeLogs} from "shared-utils/src/sanitizeLogs";
-import {db} from "shared-utils/src/db/knex"
+import {sanitizeLogs} from "@shared/utils/src/sanitizeLogs";
+import {db} from "@shared/utils/src/db/knex";
 import {v4 as uuidv4} from "uuid";
-import {IncidentCreatedEvent} from "shared-utils/src/types"
+import {IncidentCreatedEvent} from "@shared/utils/src/types"
 import {producer} from "./kafka"
 
 export const produceCreateIncidentEvent = async (log:any) => {

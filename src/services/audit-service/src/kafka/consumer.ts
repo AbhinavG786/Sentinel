@@ -1,5 +1,5 @@
 import { producer, consumer } from "./kafka";
-import { db } from "shared-utils/src/db/knex";
+import { db } from "@shared/utils/src/db/knex";
 
 export const startAuditAlertConsumers = async () => {
   await consumer.subscribe({
@@ -49,4 +49,3 @@ export const startAuditAlertConsumers = async () => {
     },
   });
 };
-

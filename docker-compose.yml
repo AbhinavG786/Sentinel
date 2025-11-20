@@ -1,33 +1,104 @@
-version: '3.8'
-
 services:
+
   api-gateway:
-    build: ./src/gateway
+    build:
+      context: .
+      dockerfile: src/gateway/Dockerfile
     ports:
       - "3000:3000"
+    environment:
+      PORT: 3000
+      USER_SERVICE_URL: ${USER_SERVICE_URL}
+      INCIDENT_SERVICE_URL: ${INCIDENT_SERVICE_URL}
+      FIREWALL_SERVICE_URL: ${FIREWALL_SERVICE_URL}
+      AUDIT_SERVICE_URL: ${AUDIT_SERVICE_URL}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL}
+      KAFKA_BROKER: ${KAFKA_BROKER}
+      REDIS_URL: redis://redis:6379
     depends_on:
+      - user-service
       - incident-service
       - firewall-service
+      - audit-service
+      - notification-service
       - kafka
+      - redis
+
+  user-service:
+    build:
+      context: .
+      dockerfile: src/services/user-service/Dockerfile
+    ports:
+      - "4000:4000"
     environment:
-      - REDIS_URL=redis://redis:6379
-      - KAFKA_BROKER=kafka:9092
+      PORT: 4000
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      KAFKA_BROKER: ${KAFKA_BROKER}
+    depends_on:
+      - postgres
+      - kafka
 
   incident-service:
-    build: ./src/services/incident-service
+    build:
+      context: .
+      dockerfile: src/services/incident-service/Dockerfile
     ports:
       - "4001:4001"
     environment:
-      - DATABASE_URL=postgresql://postgres:sunil786@postgres:5432/incidents
-      - KAFKA_BROKER=kafka:9092
+      PORT: 4001
+      REDIS_URL: ${REDIS_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      KAFKA_BROKER: ${KAFKA_BROKER}
+    depends_on:
+      - postgres
+      - kafka
+      - redis
 
   firewall-service:
-    build: ./src/services/firewall-service
+    build:
+      context: .
+      dockerfile: src/services/firewall-service/Dockerfile
     ports:
       - "4002:4002"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - KAFKA_BROKER=kafka:9092
+      PORT: 4002
+      GOOGLE_GENAI_API_KEY: ${GOOGLE_GENAI_API_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      KAFKA_BROKER: ${KAFKA_BROKER}
+    depends_on:
+      - postgres
+      - kafka
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: src/services/audit-service/Dockerfile
+    ports:
+      - "4003:4003"
+    environment:
+      PORT: 4003
+      DATABASE_URL: ${DATABASE_URL}
+      KAFKA_BROKER: ${KAFKA_BROKER}
+    depends_on:
+      - postgres
+      - kafka
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: src/services/notification-service/Dockerfile
+    ports:
+      - "4004:4004"
+    environment:
+      PORT: 4004
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      KAFKA_BROKER: ${KAFKA_BROKER}
+    depends_on:
+      - postgres
+      - kafka
 
   kafka:
     image: confluentinc/cp-kafka:latest
@@ -53,6 +124,8 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_PASSWORD: sunil786
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     ports:
       - "5432:5432"

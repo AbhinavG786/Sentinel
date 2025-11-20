@@ -1,9 +1,9 @@
 import axios from "axios";
-import { db } from "shared-utils/src/db/knex";
+
 import {
   IncidentAnalyzedEvent,
   IncidentStoredEvent,
-} from "shared-utils/src/types";
+} from "@shared/utils/src/types";
 import { consumer } from "./kafka";
 import { producer } from "./kafka";
 
@@ -24,9 +24,12 @@ export const aiAnalyzer = async () => {
       );
 
       try {
-        const analysis: any = await axios.post("http://localhost:4002/api/analyze", {
-          incident: incident.sanitizedSnippet,
-        });
+        const analysis: any = await axios.post(
+          "http://localhost:4002/api/analyze",
+          {
+            incident: incident.sanitizedSnippet,
+          }
+        );
         //  const summary = analysis.data.summary;
         console.log(" AI summary received:", analysis.data.summary);
 

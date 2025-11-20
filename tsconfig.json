@@ -2,30 +2,14 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "CommonJS",
-    "lib": ["ES2020"],
-    "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
     "skipLibCheck": true,
     "baseUrl": ".",
-    "typeRoots": ["./node_modules/@types", "./types"],
     "paths": {
-      "shared-utils/*": ["packages/shared-utils/src/*"]
+      "@shared/*": ["packages/shared-utils/src/*"]
     }
-  },
-  "include": [
-    "src",
-    "types",
-    "src/firebase",
-    "packages/shared-utils/src/kafka.ts",
-    "packages/shared-utils/src/redisClient.ts",
-    "packages/shared-utils/src/env.ts",
-    "packages/shared-utils/src/knexFile.ts",
-    "packages/shared-utils/src/db"
-  ],
-  "exclude": ["node_modules", "dist"]
+  }
 }

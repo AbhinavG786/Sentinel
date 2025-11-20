@@ -10,6 +10,10 @@ src/services/incident-service/node_modules
 src/services/incident-service/dist
 src/services/user-service/node_modules
 src/services/user-service/dist
+src/services/notification-service/node_modules
+src/services/notification-service/dist
+src/services/audit-service/node_modules
+src/services/audit-service/dist
 src/gateway/node_modules
 src/gateway/dist
 ownership.txt

@@ -1,6 +1,7 @@
 import { consumer } from "./kafka";
 import { sendSlack } from "../integrations/slack";
 import { sendEmail } from "../integrations/email";
+import { db } from "@shared/utils/src/db/knex";
 
 export const startNotificationConsumer = async () => {
   await consumer.subscribe({ topic: "alert.created" });
@@ -11,15 +12,21 @@ export const startNotificationConsumer = async () => {
       if (!message.value) return;
       const alert = JSON.parse(message.value.toString());
 
-//       // Slack
- const text = ` *${alert.severity.toUpperCase()} ALERT*  
+      const [sysEvent] = await db("system_events")
+        .insert({
+          event_type: "alert.created",
+          source: "notification-service",
+          payload: alert,
+        })
+        .returning("*");
+
+      // Slack
+      const text = ` *${alert.severity.toUpperCase()} ALERT*  
 Incident: ${alert.incident_id}  
 Message: ${alert.message}`;
-      await sendSlack(
-       text
-      );
+      await sendSlack(text);
 
-//       // Email
+      // Email
       await sendEmail({
         to: "oncall-team@company.com",
         subject: `ALERT: ${alert.severity} severity`,
@@ -31,6 +38,12 @@ Severity: ${alert.severity}
       });
 
       console.log("Alert notification sent");
-    }
+
+      await db("system_events")
+        .where({ id: sysEvent.id })
+        .update({ processed: true });
+
+      console.log("[Notification] Alert processed.");
+    },
   });
 };

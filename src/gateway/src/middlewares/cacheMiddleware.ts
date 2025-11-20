@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import redisClient from "shared-utils/src/redisClient";
+import redisClient from "@shared/utils/src/redisClient";
 
 export function cacheMiddleware(ttlSeconds: number) {
   return async (req: Request, res: Response, next: NextFunction) => {

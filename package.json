@@ -2,7 +2,8 @@
   "private": true,
   "workspaces": [
     "src/services/*",
-    "packages/*"
+    "packages/*",
+    "src/gateway"
   ],
   "name": "sentinel",
   "version": "1.0.0",
@@ -10,7 +11,6 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc -b",
     "dev": "concurrently \"npm run dev:gateway\" \"npm run dev:users\" \"npm run dev:incidents\"",
     "dev:gateway": "ts-node src/gateway/index.ts",
     "dev:users": "ts-node src/services/user-service/index.ts",

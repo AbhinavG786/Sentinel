@@ -1,4 +1,4 @@
-import { db } from "shared-utils/src/db/knex";
+import { db } from "@shared/utils/src/db/knex";
 
 export interface User {
   id?: string;
@@ -53,7 +53,6 @@ class UserService {
       .where({ email })
       .first();
   };
-
 }
 
 export default new UserService();
