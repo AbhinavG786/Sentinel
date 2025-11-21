@@ -3,7 +3,7 @@ services:
   api-gateway:
     build:
       context: .
-      dockerfile: src/gateway/Dockerfile
+      dockerfile: docker/Dockerfile.gateway
     ports:
       - "3000:3000"
     environment:
@@ -27,7 +27,7 @@ services:
   user-service:
     build:
       context: .
-      dockerfile: src/services/user-service/Dockerfile
+      dockerfile: docker/Dockerfile.user
     ports:
       - "4000:4000"
     environment:
@@ -42,7 +42,7 @@ services:
   incident-service:
     build:
       context: .
-      dockerfile: src/services/incident-service/Dockerfile
+      dockerfile: docker/Dockerfile.incident
     ports:
       - "4001:4001"
     environment:
@@ -58,7 +58,7 @@ services:
   firewall-service:
     build:
       context: .
-      dockerfile: src/services/firewall-service/Dockerfile
+      dockerfile: docker/Dockerfile.firewall
     ports:
       - "4002:4002"
     environment:
@@ -73,7 +73,7 @@ services:
   audit-service:
     build:
       context: .
-      dockerfile: src/services/audit-service/Dockerfile
+      dockerfile: docker/Dockerfile.audit
     ports:
       - "4003:4003"
     environment:
@@ -87,7 +87,7 @@ services:
   notification-service:
     build:
       context: .
-      dockerfile: src/services/notification-service/Dockerfile
+      dockerfile: docker/Dockerfile.notification
     ports:
       - "4004:4004"
     environment:

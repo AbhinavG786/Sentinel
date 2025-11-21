@@ -1,0 +1,17 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy full monorepo
+COPY . .
+
+# Install deps only for this service
+RUN npm install --workspace=src/gateway
+
+# Build
+RUN npm run build --workspace=src/gateway
+
+EXPOSE 3000
+
+CMD ["node", "src/gateway/dist/index.js"]
+

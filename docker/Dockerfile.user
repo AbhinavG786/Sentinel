@@ -1,0 +1,16 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy full monorepo
+COPY . .
+
+# Install deps only for this service
+RUN npm install --workspace=src/services/user-service
+
+# Build
+RUN npm run build --workspace=src/services/user-service
+
+EXPOSE 4000
+
+CMD ["node", "src/services/user-service/dist/server.js"]

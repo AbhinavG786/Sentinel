@@ -17,6 +17,6 @@
   },
   "dependencies": {
     "kafkajs": "^2.2.4",
-    "shared-utils": "workspace:*"
+    "@shared/utils": "*"
   }
 }

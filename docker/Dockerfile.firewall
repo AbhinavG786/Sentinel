@@ -1,0 +1,16 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy full monorepo
+COPY . .
+
+# Install deps only for this service
+RUN npm install --workspace=src/services/firewall-service
+
+# Build
+RUN npm run build --workspace=src/services/firewall-service
+
+EXPOSE 4002
+
+CMD ["node", "src/services/firewall-service/dist/server.js"]
