@@ -7,9 +7,9 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
-    "paths": {
-      "@shared/*": ["packages/shared-utils/src/*"]
-    }
+    "baseUrl": "."
+    // "paths": {
+    //   "@shared/utils": ["packages/shared-utils/src/index.ts"]
+    // }
   }
 }

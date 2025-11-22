@@ -1,4 +1,4 @@
-import kafka from "@shared/utils/src/kafka";
+import {kafka} from "@shared/utils";
 import { Consumer } from "kafkajs";
 import { Producer } from "kafkajs";
 

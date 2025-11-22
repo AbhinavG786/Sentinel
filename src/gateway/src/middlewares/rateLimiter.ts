@@ -1,4 +1,4 @@
-import redisClient from "@shared/utils/src/redisClient";
+import {redisClient} from "@shared/utils";
 import { Request, Response, NextFunction } from "express";
 
 export interface RateLimitOptions {

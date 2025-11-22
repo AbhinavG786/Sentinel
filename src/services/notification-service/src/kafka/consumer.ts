@@ -1,7 +1,7 @@
 import { consumer } from "./kafka";
 import { sendSlack } from "../integrations/slack";
 import { sendEmail } from "../integrations/email";
-import { db } from "@shared/utils/src/db/knex";
+import { db } from "@shared/utils";
 
 export const startNotificationConsumer = async () => {
   await consumer.subscribe({ topic: "alert.created" });

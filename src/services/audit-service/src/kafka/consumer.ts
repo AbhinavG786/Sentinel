@@ -1,6 +1,5 @@
 import { producer, consumer } from "./kafka";
-import { db } from "@shared/utils/src/db/knex";
-
+import { db } from "@shared/utils"
 export const startAuditAlertConsumers = async () => {
   await consumer.subscribe({
     topic: "audit.event",

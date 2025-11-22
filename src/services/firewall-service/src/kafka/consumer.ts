@@ -3,7 +3,7 @@ import axios from "axios";
 import {
   IncidentAnalyzedEvent,
   IncidentStoredEvent,
-} from "@shared/utils/src/types";
+} from "@shared/utils";
 import { consumer } from "./kafka";
 import { producer } from "./kafka";
 

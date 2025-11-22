@@ -1,4 +1,4 @@
 // knexfile.js
-import knexFile from "@shared/utils/src/db/knexfile";
-export default knexFile;
+import {knexConfig} from "@shared/utils";
+export default knexConfig;
 

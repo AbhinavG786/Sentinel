@@ -1,4 +1,4 @@
-import { db } from "@shared/utils/src/db/knex";
+import { db } from "@shared/utils";
 
 export interface Incident {
   id?: string;

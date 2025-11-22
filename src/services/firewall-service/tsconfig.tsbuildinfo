@@ -1,1 +1,0 @@
-{"root":["./src/server.ts","./src/ai/analyzer.ts","./src/controllers/ingestlogs.ts","./src/kafka/consumer.ts","./src/kafka/kafka.ts","./src/kafka/producer.ts","./src/routes/anayzer.routes.ts","./src/routes/ingest.routes.ts"],"version":"5.9.3"}

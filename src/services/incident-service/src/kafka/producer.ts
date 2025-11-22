@@ -1,4 +1,4 @@
-import kafka from "@shared/utils/src/kafka";
+import {kafka} from "@shared/utils";
 import { Producer } from "kafkajs";
 import { Incident } from "../helpers/incidents.helpers";
 

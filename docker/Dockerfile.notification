@@ -2,8 +2,23 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy full monorepo
-COPY . .
+# Copy root first
+COPY package.json package-lock.json tsconfig.json ./
+
+# Copy ONLY what this service needs
+COPY src/services/notification-service ./src/services/notification-service
+
+# Copy service tsconfig if it exists
+COPY src/services/notification-service/tsconfig.json ./src/services/notification-service/tsconfig.json
+
+# ADD THIS: copy your shared package
+COPY packages/shared-utils ./packages/shared-utils
+
+# Install root + workspace deps so shared-utils becomes a real package
+RUN npm install
+
+# Build shared utils
+RUN npm run build --workspace=packages/shared-utils
 
 # Install deps only for this service
 RUN npm install --workspace=src/services/notification-service

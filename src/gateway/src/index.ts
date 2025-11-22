@@ -1,4 +1,4 @@
-import { config } from "@shared/utils/src/env";
+import { config } from "@shared/utils";
 import app from "./app";
 
 const PORT = config.GATEWAY_PORT || 3000;

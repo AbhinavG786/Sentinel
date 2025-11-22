@@ -1,1 +1,0 @@
-{"root":["./src/integrations/email.ts","./src/integrations/slack.ts","./src/kafka/consumer.ts","./src/kafka/kafka.ts","./src/kafka/producer.ts"],"version":"5.9.3"}
