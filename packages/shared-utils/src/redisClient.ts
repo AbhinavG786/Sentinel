@@ -6,14 +6,24 @@ import Redis from "ioredis";
 //     password:process.env.REDIS_PASSWORD||undefined,
 // })
 
-const redisClient = new Redis(process.env.REDIS_URL!);
+let redisClient:Redis |null=null;
 
-redisClient.on("connect", () => {
+function getRedisClient(){
+  if (!redisClient) {
+    if (!process.env.REDIS_URL) {
+      throw new Error("REDIS_URL is missing");
+    }
+    redisClient = new Redis(process.env.REDIS_URL);
+  }
+  
+  redisClient.on("connect", () => {
     console.log("Connected to Redis server");
     });
+    
+    redisClient.on("error", (err) => {
+      console.error("Redis error:", err);
+    });
+    return redisClient;
+}
 
-redisClient.on("error", (err) => {
-  console.error("Redis error:", err);
-});
-
-export { redisClient };
+export { getRedisClient };

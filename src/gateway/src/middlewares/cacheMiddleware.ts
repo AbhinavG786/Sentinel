@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from "express";
-import {redisClient} from "@shared/utils";
+import {getRedisClient} from "@shared/utils";
 
 export function cacheMiddleware(ttlSeconds: number) {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (req.method !== "GET") return next();
     const key = `cache:${req.originalUrl}`;
     try {
+      const redisClient = getRedisClient();
       const cachedRaw = await redisClient.get?.(key);
       if (cachedRaw) {
         try {
