@@ -3,16 +3,19 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Copy root first
-COPY package.json package-lock.json tsconfig.json ./
+COPY package.json package-lock.json ./
+
+# ADD THIS: copy your shared package
+COPY packages/shared-utils ./packages/shared-utils
+
+# Copy root tsconfig AFTER shared-utils so it doesn’t override local tsconfig resolution
+COPY tsconfig.json ./
 
 # Copy ONLY what this service needs
 COPY src/services/incident-service ./src/services/incident-service
 
 # Copy service tsconfig if it exists
 COPY src/services/incident-service/tsconfig.json ./src/services/incident-service/tsconfig.json
-
-# ADD THIS: copy your shared package
-COPY packages/shared-utils ./packages/shared-utils
 
 # Install root + workspace deps so shared-utils becomes a real package
 RUN npm install

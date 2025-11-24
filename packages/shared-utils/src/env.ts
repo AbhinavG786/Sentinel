@@ -1,10 +1,16 @@
-import dotenv from 'dotenv';
-import path from "path";
+import * as dotenv from 'dotenv';
+import * as path from "path";
+
+
+// const rootPath = path.resolve(__dirname, "..", "..");  // moves from dist/env.js → packages/shared-utils
+// const envPath = path.resolve(rootPath, "..", ".env"); 
+
 
 dotenv.config({
   path: path.resolve(__dirname, "../../../.env"),
 });
 
+// dotenv.config({ path: envPath });
 
 export const config={
     DATABASE_URL:process.env.DATABASE_URL!,

@@ -21,7 +21,7 @@ const knexConfig: Record<string, Knex.Config> = {
     migrations: {
       ...baseKnexConfig.migrations,
       extension: "js",
-      directory:path.resolve(ROOT_DIR, "dist", "packages", "shared-utils", "src", "db", "migrations"),
+      directory:path.resolve(ROOT_DIR, "dist", "db", "migrations"),
     },
   },
 };
