@@ -15,7 +15,7 @@ export const startAIUpdateConsumer = async () => {
 
   await consumer2.run({
     eachMessage: async ({ message }) => {
-      if (message.key?.toString() !== "incident.analyzed" || !message.value)
+      if (!message.value)
         return;
       const { incidentId, summary, root_cause, resolution, confidence } =
         JSON.parse(message.value!.toString()) as IncidentAnalyzedEvent;
@@ -78,12 +78,13 @@ export const consumeIncidentCreatedEvent = async () => {
 
   await consumer1.run({
     eachMessage: async ({ topic, partition, message }) => {
-      if (message.key?.toString() !== "incident.created" || !message.value) {
+      if (!message.value) {
         return;
       }
       const event: IncidentCreatedEvent = JSON.parse(message.value!.toString());
       console.log("Received incident created event:", event.tempId);
       const { tempId, traceId, source, severity, sanitizedSnippet } = event;
+      console.log("Sanitized Snippet:", sanitizedSnippet);
       const duplicate = await db("incidents")
         .where({ temp_id: tempId })
         .first();

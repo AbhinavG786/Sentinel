@@ -34,7 +34,7 @@ export async function sanitizeLogs(
     dataString = dataString.replace(regex, replace);
   }
 
-  // STEP 2️⃣ — Load active knowledge policies
+  // STEP 2 — Load active knowledge policies
   const policies = await db("knowledge_policies").select("*");
 
   for (const policy of policies) {

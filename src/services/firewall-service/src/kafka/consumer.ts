@@ -12,7 +12,7 @@ export const aiAnalyzer = async () => {
 
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
-      if (message.key?.toString() !== "incident.stored" || !message.value) {
+      if (!message.value) {
         return;
       }
       const incident = JSON.parse(

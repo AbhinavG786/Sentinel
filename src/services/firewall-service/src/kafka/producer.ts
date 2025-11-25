@@ -25,5 +25,5 @@ export const produceCreateIncidentEvent = async (log:any) => {
 
   console.log(`Incident created with tempId: ${event.tempId} for log id: ${log.id}`);
 
-  await producer.disconnect();
+  // await producer.disconnect();
 }
