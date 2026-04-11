@@ -16,13 +16,13 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
     "@types/jsonwebtoken": "^9.0.10",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.2"
   },
   "dependencies": {
+    "@shared/utils": "*",
     "axios": "^1.13.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "@shared/utils": "*"
+    "jsonwebtoken": "^9.0.2"
   }
 }

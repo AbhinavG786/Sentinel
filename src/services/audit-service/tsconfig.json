@@ -7,11 +7,12 @@
     "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "skipLibCheck": true,
+    "rootDir": "src",
     "typeRoots": ["./node_modules/@types", "./types"]
   },
   "include": [
