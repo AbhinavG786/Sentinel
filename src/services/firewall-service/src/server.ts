@@ -1,8 +1,8 @@
 import express from "express";
 import { initKafka } from "./kafka/kafka";
-import analyzerRoutes from "./routes/anayzer.routes";
+import analyzerRoutes from "./routes/analyzer.routes";
 import ingestRoutes from "./routes/ingest.routes";
-
+import { aiAnalyzer } from "./kafka/consumer";
 
 const app = express();
 app.use(express.json());
@@ -13,4 +13,5 @@ app.use("/api", ingestRoutes);
 app.listen(4002, async () => {
   console.log("Knowledge Firewall service running on 4002");
   await initKafka();
+  await aiAnalyzer();
 });

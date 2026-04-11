@@ -6,3 +6,5 @@ export * from "./sanitizeLogs"
 export * from "./types";
 export * from "./db/knex";
 export * from "./db/knexfile";
+export * from "./authMiddleware";
+    

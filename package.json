@@ -26,7 +26,6 @@
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
-    "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.5",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.9.2",
@@ -36,8 +35,10 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@shared/utils": "file:packages/shared-utils",
     "axios": "^1.13.1",
     "bcrypt": "^6.0.0",
+    "concurrently": "^9.2.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
@@ -45,7 +46,6 @@
     "jsonwebtoken": "^9.0.2",
     "kafkajs": "^2.2.4",
     "knex": "^3.1.0",
-    "pg": "^8.16.3",
-    "@shared/utils": "file:packages/shared-utils"
+    "pg": "^8.16.3"
   }
 }

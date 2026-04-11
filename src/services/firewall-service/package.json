@@ -12,11 +12,7 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "@types/axios": "^0.9.36",
-    "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.5",
-    "@types/kafkajs": "^1.8.2",
-    "@types/knex": "^0.15.2",
     "@types/uuid": "^10.0.0",
     "typescript": "^5.9.3"
   },

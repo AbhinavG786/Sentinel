@@ -10,11 +10,12 @@ router.use(rateLimiter({ windowInSeconds: 60, maxRequests: 10 }));
 router.use(async (req: Request, res: Response) => {
   try {
     const target = `${SERVICES.firewall}${req.originalUrl}`;
+    const { host, 'content-length': _, ...cleanHeaders } = req.headers;
     const response = await axios({
       method: req.method as any,
       url: target,
       data: req.body,
-      headers: { ...req.headers },
+      headers: { ...cleanHeaders },
     });
 
     res.status(response.status).json(response.data);

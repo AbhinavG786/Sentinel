@@ -56,6 +56,7 @@ export const startAIUpdateConsumer = async () => {
       });
 
       // Optional: trigger alert based on severity confusion
+      if (confidence > 0.7 && ["high", "critical"].includes(updatedIncident.severity)) {
       await producer.send({
         topic: "alert.created",
         messages: [
@@ -69,6 +70,7 @@ export const startAIUpdateConsumer = async () => {
           },
         ],
       });
+    }
     },
   });
 };

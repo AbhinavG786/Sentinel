@@ -1,5 +1,4 @@
-import axios from "axios";
-
+import { analyzeIncident } from "../ai/analyzer";
 import {
   IncidentAnalyzedEvent,
   IncidentStoredEvent,
@@ -24,14 +23,15 @@ export const aiAnalyzer = async () => {
       );
 
       try {
-        const analysis: any = await axios.post(
-          "http://localhost:4002/api/analyze",
-          {
-            incident: incident.sanitizedSnippet,
-          }
-        );
+        // const analysis: any = await axios.post(
+        //   "http://localhost:4004/api/analyze",
+        //   {
+        //     incident: incident.sanitizedSnippet,
+        //   }
+        // );
+        const analysis: any = await analyzeIncident(incident.sanitizedSnippet);
         //  const summary = analysis.data.summary;
-        console.log(" AI summary received:", analysis.data.summary);
+        console.log(" AI summary received:", analysis.summary);
 
         // await db("incidents").where({ id: incident.id }).update({
         //   ai_analysis: summary,
@@ -39,7 +39,7 @@ export const aiAnalyzer = async () => {
 
         const analyzedEvent: IncidentAnalyzedEvent = {
           incidentId: incident.incidentId,
-          ...analysis.data,
+          ...analysis,
           analyzedAt: new Date().toISOString(),
         };
 

@@ -10,7 +10,7 @@ export const produceCreateIncidentEvent = async (log:any) => {
     traceId: log.traceId || uuidv4(),
     source: log.source || "unknown",
     severity: log.severity || "medium",
-    sanitizedSnippet: await sanitizeLogs(db, log.message),
+    sanitizedSnippet: await sanitizeLogs(db, log),
     sanitizedPayloadRef: log.payloadRef,
     timestamp: new Date().toISOString(),
   };
@@ -18,7 +18,7 @@ export const produceCreateIncidentEvent = async (log:any) => {
   await producer.send({
     topic:"incident.created",
     messages:[{
-        key:"event.tempId",
+        key:event.tempId,
         value: JSON.stringify(event),
     }]
   })

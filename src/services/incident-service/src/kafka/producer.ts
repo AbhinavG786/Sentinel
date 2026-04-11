@@ -1,21 +1,13 @@
-import {kafka} from "@shared/utils";
-import { Producer } from "kafkajs";
+import { producer } from "./kafka";
 import { Incident } from "../helpers/incidents.helpers";
-
-const producer: Producer = kafka.producer();
-
-export const initProducer = async () => {
-  await producer.connect();
-  console.log("Kafka Producer connected");
-};
 
 export const sendIncidentEvent = async (incident: Incident) => {
   try {
     await producer.send({
-      topic: "incident.created",
+      topic: "incident.manual_created",
       messages: [
         {
-          key: "incident.created",
+          key: incident.id || "unknown",
           value: JSON.stringify(incident),
         },
       ],

@@ -14,15 +14,16 @@ function getRedisClient(){
       throw new Error("REDIS_URL is missing");
     }
     redisClient = new Redis(process.env.REDIS_URL);
-  }
-  
-  redisClient.on("connect", () => {
-    console.log("Connected to Redis server");
+    redisClient.on("connect", () => {
+      console.log("Connected to Redis server");
     });
-    
+      
     redisClient.on("error", (err) => {
       console.error("Redis error:", err);
     });
+  }
+  
+
     return redisClient;
 }
 

@@ -1,10 +1,10 @@
 import incidentsController from "../controllers/incidents.controller";
 import { Router } from "express";
 
-const router = Router();
-router.post("/", incidentsController.createIncident);
-router.get("/", incidentsController.getAllIncidents);
-router.get("/:id", incidentsController.getIncidentById);
-router.patch("/:id", incidentsController.updateIncident);
-router.delete("/:id", incidentsController.deleteIncident);
-export default router;
+const incidentsRouter = Router();
+incidentsRouter.post("/", incidentsController.createIncident);
+incidentsRouter.get("/", incidentsController.getAllIncidents);
+incidentsRouter.get("/:id", incidentsController.getIncidentById);
+incidentsRouter.patch("/:id", incidentsController.updateIncident);
+incidentsRouter.delete("/:id", incidentsController.deleteIncident);
+export default incidentsRouter;

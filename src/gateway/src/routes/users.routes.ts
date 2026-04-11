@@ -1,7 +1,7 @@
 import { Request, Response, Router } from "express";
 import axios from "axios";
 import { rateLimiter } from "../middlewares/rateLimiter";
-import { authenticate, authorize } from "../middlewares/authMiddleware";
+import { authenticate, authorize } from "@shared/utils";
 import { SERVICES } from "../utils/serviceRegistry";
 
 const router = Router();
@@ -11,11 +11,12 @@ router.post(
   rateLimiter({ windowInSeconds: 60, maxRequests: 5 }),
   async (req: Request, res: Response) => {
     try {
+      const { host, 'content-length': _, ...cleanHeaders } = req.headers;
       const response = await axios.post(
         `${SERVICES.users}/users/register`,
         req.body,
         {
-          headers: req.headers,
+          headers: cleanHeaders,
         }
       );
       res.status(response.status).json(response.data);
@@ -32,11 +33,12 @@ router.post(
   rateLimiter({ windowInSeconds: 60, maxRequests: 5 }),
   async (req: Request, res: Response) => {
     try {
+      const { host, 'content-length': _, ...cleanHeaders } = req.headers;
       const response = await axios.post(
         `${SERVICES.users}/users/login`,
         req.body,
         {
-          headers: req.headers,
+          headers: cleanHeaders,
         }
       );
       res.status(response.status).json(response.data);
@@ -54,8 +56,9 @@ router.get(
   authorize("admin"),
   async (req: Request, res: Response) => {
     try {
+      const { host, 'content-length': _, ...cleanHeaders } = req.headers;
       const response = await axios.get(`${SERVICES.users}/users`, {
-        headers: req.headers,
+        headers: cleanHeaders,
       });
       res.status(response.status).json(response.data);
     } catch (error: any) {
@@ -67,10 +70,11 @@ router.get(
 );
 router.get("/:id", authenticate, async (req: Request, res: Response) => {
   try {
+    const { host, 'content-length': _, ...cleanHeaders } = req.headers;
     const response = await axios.get(
       `${SERVICES.users}/users/${req.params.id}`,
       {
-        headers: req.headers,
+        headers: cleanHeaders,
       }
     );
     res.status(response.status).json(response.data);
@@ -83,11 +87,12 @@ router.get("/:id", authenticate, async (req: Request, res: Response) => {
 
 router.patch("/:id", authenticate, async (req: Request, res: Response) => {
   try {
+    const { host, 'content-length': _, ...cleanHeaders } = req.headers;
     const response = await axios.patch(
       `${SERVICES.users}/users/${req.params.id}`,
       req.body,
       {
-        headers: req.headers,
+        headers: cleanHeaders,
       }
     );
     res.status(response.status).json(response.data);
@@ -100,10 +105,11 @@ router.patch("/:id", authenticate, async (req: Request, res: Response) => {
 
 router.delete("/:id", authenticate, async (req: Request, res: Response) => {
   try {
+    const { host, 'content-length': _, ...cleanHeaders } = req.headers;
     const response = await axios.delete(
       `${SERVICES.users}/users/${req.params.id}`,
       {
-        headers: req.headers,
+        headers: cleanHeaders,
       }
     );
     res.status(response.status).json(response.data);

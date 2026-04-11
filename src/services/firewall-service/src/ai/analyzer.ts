@@ -1,11 +1,10 @@
-import { Request, Response } from "express";
 import { Type, GoogleGenAI } from "@google/genai";
 const ai = new GoogleGenAI({
   apiKey: process.env.GOOGLE_GENAI_API_KEY || "",
 });
 
-const analyzeIncident = async (req: Request, res: Response) => {
-  const { incident } = req.body;
+const analyzeIncident = async (incident:any) => {
+  // const { incident } = req.body;
 
   // const prompt = `
   //   You are an incident analysis AI.
@@ -63,10 +62,10 @@ const analyzeIncident = async (req: Request, res: Response) => {
     });
 
     console.log(JSON.parse(response.text));
-    res.json({ result: JSON.parse(response.text) });
+    return JSON.parse(response.text);
   } catch (error: any) {
     console.error("AI Error:", error.message);
-    res.status(500).json({ error: "AI analysis failed" });
+    return { error: "AI analysis failed" };
   }
 };
 

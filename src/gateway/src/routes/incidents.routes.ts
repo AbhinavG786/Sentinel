@@ -2,7 +2,7 @@ import { Request, Response, Router, RequestHandler } from "express";
 import axios from "axios";
 import { rateLimiter } from "../middlewares/rateLimiter";
 import { cacheMiddleware } from "../middlewares/cacheMiddleware";
-import { authenticate,authorize } from "../middlewares/authMiddleware";
+import { authenticate,authorize } from "@shared/utils";
 import { SERVICES } from "../utils/serviceRegistry";
 
 const router = Router();
@@ -10,8 +10,9 @@ const router = Router();
 
 router.get("/", rateLimiter({windowInSeconds: 60,maxRequests: 10}),authenticate, authorize("admin", "user"), cacheMiddleware(30), async (req: Request, res: Response) => {
   try {
+    const { host, 'content-length': _, ...cleanHeaders } = req.headers;
     const response = await axios.get(`${SERVICES.incidents}/incidents`, {
-      headers: req.headers,
+      headers: cleanHeaders,
     });
     res.status(response.status).json(response.data);
   } catch (error: any) {
@@ -21,8 +22,9 @@ router.get("/", rateLimiter({windowInSeconds: 60,maxRequests: 10}),authenticate,
 
 router.post("/", authenticate, authorize("admin", "user"), async (req: Request, res: Response) => {
   try {
+    const { host, 'content-length': _, ...cleanHeaders } = req.headers;
     const response = await axios.post(`${SERVICES.incidents}/incidents`, req.body, {
-      headers: req.headers,
+      headers: cleanHeaders,
     });
     res.status(response.status).json(response.data);
   } catch (error: any) {
@@ -32,8 +34,9 @@ router.post("/", authenticate, authorize("admin", "user"), async (req: Request, 
 
 router.get("/:id", cacheMiddleware(15) , async (req: Request, res: Response) => {
   try {
+    const { host, 'content-length': _, ...cleanHeaders } = req.headers;
     const response = await axios.get(`${SERVICES.incidents}/incidents/${req.params.id}`, {
-      headers: req.headers,
+      headers: cleanHeaders,
     });
     res.status(response.status).json(response.data);
   } catch (error: any) {
@@ -44,8 +47,9 @@ router.get("/:id", cacheMiddleware(15) , async (req: Request, res: Response) => 
 router.patch("/:id", authenticate,
   authorize("admin", "user"), async (req: Request, res: Response) => {
   try {
+    const { host, 'content-length': _, ...cleanHeaders } = req.headers;
     const response = await axios.patch(`${SERVICES.incidents}/incidents/${req.params.id}`, req.body, {
-      headers: req.headers,
+      headers: cleanHeaders,
     });
     res.status(response.status).json(response.data);
   } catch (error: any) {
@@ -56,8 +60,9 @@ router.patch("/:id", authenticate,
 router.delete("/:id", authenticate,
   authorize("admin", "user"), async (req: Request, res: Response) => {
   try {
+    const { host, 'content-length': _, ...cleanHeaders } = req.headers;
     const response = await axios.delete(`${SERVICES.incidents}/incidents/${req.params.id}`, {
-      headers: req.headers,
+      headers: cleanHeaders,
     });
     res.status(response.status).json(response.data);
   } catch (error: any) {

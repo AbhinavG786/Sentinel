@@ -74,15 +74,15 @@ export async function sanitizeLogs(
 
     if (matched) {
       // Record event in system_events
-      // await db("system_events").insert({
-      //   event_type: "POLICY_TRIGGERED",
-      //   source: "firewall_sanitization",
-      //   payload: JSON.stringify({
-      //     policy_id: policy.id,
-      //     incident_id: incident.id,
-      //     user_id: userId || null,
-      //   }),
-      // });
+      await db("system_events").insert({
+        event_type: "POLICY_TRIGGERED",
+        source: "firewall_sanitization",
+        payload: JSON.stringify({
+          policy_id: policy.id,
+          incident_id: null, // incident id is not available at this point
+          user_id: userId || null,
+        }),
+      });
 
       // Record detailed policy log
       await db("policy_logs").insert({
@@ -95,14 +95,14 @@ export async function sanitizeLogs(
       });
 
       // Create alert (optional)
-      // await db("alerts").insert({
-      //   incident_id: incident.id,
-      //   triggered_by: userId || null,
-      //   message: `Policy "${policy.name}" triggered on incident ${incident.id}`,
-      //   severity: "medium",
-      // });
+      await db("alerts").insert({
+        incident_id: null , // incident id is not available at this point
+        triggered_by: userId || null,
+        message: `Policy "${policy.name}" triggered on incident that is yet not available`,// incident id will be available when incident is created
+        severity: "medium",
+      });
     }
   }
 
-  return JSON.parse(dataString);
+  return dataString;
 }
