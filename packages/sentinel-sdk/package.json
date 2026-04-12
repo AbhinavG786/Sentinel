@@ -1,0 +1,20 @@
+{
+  "name": "@sentinel/sdk",
+  "version": "1.0.0",
+  "description": "Lightweight SDK to send production error logs to the Sentinel observability platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project ./tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["observability", "error-tracking", "logging", "sentinel", "ai"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^24.9.2"
+  },
+  "dependencies": {}
+}
