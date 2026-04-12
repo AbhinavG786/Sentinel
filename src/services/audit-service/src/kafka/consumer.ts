@@ -7,7 +7,10 @@ export const startAuditAlertConsumers = async () => {
   await consumer.subscribe({
     topic: "alert.created",
   });
-  console.log("Audit Service listening to: audit.event, alert.created");
+  await consumer.subscribe({
+    topic: "policy.violation",
+  });
+  console.log("Audit Service listening to: audit.event, alert.created, policy.violation");
 
   await consumer.run({
     eachMessage: async ({ topic, message }) => {
@@ -40,6 +43,22 @@ export const startAuditAlertConsumers = async () => {
 
           console.log(
             ` Alert created for incident ${event.incident_id} with severity ${event.severity}`
+          );
+          break;
+        case "policy.violation":
+          for (const v of event.violations) {
+            await db("policy_logs").insert({
+              user_id: null,
+              incident_id: null,  // not available yet at firewall stage
+              policy_id: v.policy?.id || null,
+              detected_violation: v.keyword,
+              ai_response_snippet: null,
+              action_taken: v.action,
+            });
+          }
+
+          console.log(
+            ` Policy violation logged for tempId ${event.tempId} (${event.violations.length} violations)`
           );
           break;
         default:

@@ -17,6 +17,6 @@ app.get("/health" , (req, res) => {
   res.json({ message: "Notification Service is running" });
 });
 
-app.listen(4003, () => {
-  console.log("Notification Service running on port 4003");
+app.listen(4004, () => {
+  console.log("Notification Service running on port 4004");
 }); 

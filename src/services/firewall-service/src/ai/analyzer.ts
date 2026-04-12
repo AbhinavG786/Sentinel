@@ -4,16 +4,6 @@ const ai = new GoogleGenAI({
 });
 
 const analyzeIncident = async (incident:any) => {
-  // const { incident } = req.body;
-
-  // const prompt = `
-  //   You are an incident analysis AI.
-  //   Analyze the following incident and provide:
-  //     1. A short summary (2 sentences)
-  //     2. A possible cause
-  //     3. Suggested resolution steps
-  //   ${JSON.stringify(incident, null, 2)}
-  // `;
 
   const prompt = `
     You are an intelligent incident analysis AI.

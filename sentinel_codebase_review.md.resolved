@@ -1,43 +1,29 @@
-# Sentinel — Comprehensive Codebase Review
+# Sentinel — Complete Architectural Overview
 
-## 1. Project Overview
+## 1. What Is Sentinel
 
-Sentinel is an AI-powered observability platform with a **prompt firewall** for sanitizing sensitive log data before sending it to LLMs. The architecture follows a microservices pattern using TypeScript, Kafka, Knex (PostgreSQL), Redis, and an API Gateway.
-
-### Services
-| Service | Port | Role |
-|---|---|---|
-| API Gateway | 3000 | Proxy, auth, rate-limiting, caching |
-| User Service | 4000 | User CRUD, register/login with JWT |
-| Incident Service | 4001 | Incident CRUD + Kafka consumers |
-| Firewall Service | 4002 | Log ingestion, sanitization, AI analysis |
-| Audit Service | 4003 | Kafka consumer for audit logs + alerts |
-| Notification Service | 4004 | Kafka consumer → Slack + Email |
-
-### Infrastructure
-- **Kafka** (with Zookeeper) for event-driven communication
-- **Redis** for caching and rate limiting
-- **PostgreSQL** (shared DB via `@shared/utils`)
-- **Docker Compose** for orchestration
+Sentinel is an **AI-powered observability platform with a prompt firewall**. It ingests production error logs, sanitizes sensitive data (emails, IPs, API keys, tokens, passwords) using regex + database-driven knowledge policies, then uses Google Gemini AI to analyze the root cause and suggest resolutions — all without leaking sensitive data to the LLM.
 
 ---
 
-## 2. Architecture Diagram
+## 2. System Architecture
 
 ```mermaid
 graph TB
-    subgraph "External"
-        Client["Client / Sentry / Log Framework"]
+    subgraph "Client Integration"
+        SDK["@sentinel/sdk (npm package)"]
+        SENTRY["or Sentry-like webhook"]
+        CURL["or direct HTTP"]
     end
 
     subgraph "API Gateway :3000"
-        GW["Gateway"]
-        AUTH["Auth Middleware"]
-        CACHE["Cache Middleware"]
-        RL["Rate Limiter"]
+        GW["Express + CORS"]
+        AUTH["JWT Auth Middleware"]
+        CACHE["Redis Cache"]
+        RL["Rate Limiter (Redis)"]
     end
 
-    subgraph "Services"
+    subgraph "Microservices"
         US["User Service :4000"]
         FS["Firewall Service :4002"]
         IS["Incident Service :4001"]
@@ -50,23 +36,25 @@ graph TB
     end
 
     subgraph "Infrastructure"
-        KAFKA["Kafka"]
-        PG["PostgreSQL"]
+        KAFKA["Kafka + Zookeeper"]
+        PG["PostgreSQL (shared)"]
         REDIS["Redis"]
     end
 
-    Client -->|"HTTP"| GW
+    SDK --> GW
+    SENTRY --> GW
+    CURL --> GW
     GW --> AUTH --> RL --> CACHE
-    GW -->|"proxy"| US
-    GW -->|"proxy"| FS
-    GW -->|"proxy"| IS
+    GW -->|"proxy /users"| US
+    GW -->|"proxy /firewall"| FS
+    GW -->|"proxy /incidents"| IS
 
-    FS -->|"sanitize + produce"| KAFKA
+    FS -->|"produce events"| KAFKA
     IS -->|"consume + produce"| KAFKA
     AS -->|"consume"| KAFKA
     NS -->|"consume"| KAFKA
 
-    FS -->|"AI analysis"| GEMINI
+    FS -->|"direct call"| GEMINI
 
     US --> PG
     IS --> PG
@@ -80,296 +68,158 @@ graph TB
 
 ---
 
-## 3. Event Flow Diagram (Your Intended Architecture)
+## 3. Complete Event Flow (with traceId)
 
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant FW as Firewall Service
+    participant GW as API Gateway
+    participant FW as Firewall :4002
     participant K as Kafka
-    participant IS as Incident Service
-    participant AI as AI Worker (in FW)
-    participant AS as Audit Service
-    participant NS as Notification Service
+    participant IS as Incident :4001
+    participant AI as Gemini AI
+    participant AS as Audit :4003
+    participant NS as Notification :4004
 
-    C->>FW: POST /api/ingest (raw logs)
-    FW->>FW: sanitizeLogs() + policy check
-    FW->>K: produce "incident.created"
+    C->>GW: POST /firewall/api/ingest {logs}
+    GW->>FW: proxy → POST /api/ingest
+
+    Note over FW: Generate traceId + tempId
+    FW->>FW: sanitizeLogs(db, log, userId, traceId)
+    Note over FW: Regex: emails, IPs, keys, passwords, tokens
+    Note over FW: DB policies: blocked keywords, allowed domains
+    FW-->>FW: Write system_events (with traceId in payload)
+
+    FW->>K: produce "incident.created" {tempId, traceId, sanitizedSnippet}
+    FW-->>K: produce "policy.violation" {tempId, traceId, violations[]}
 
     K->>IS: consume "incident.created"
-    IS->>IS: Store in DB (uuid incident_id)
-    IS->>K: produce "incident.stored"
-    IS->>K: produce "alert.created"
+    IS->>IS: Deduplicate by tempId
+    IS->>IS: Store incident (incidentId = new UUID)
+    IS->>IS: Backfill system_events (mark processed where traceId matches)
+    IS->>K: produce "incident.stored" {incidentId, traceId, sanitizedSnippet}
 
-    K->>AI: consume "incident.stored"
-    AI->>FW: POST /api/analyze (internal HTTP)
-    FW->>FW: Gemini AI analysis
-    AI->>K: produce "incident.analyzed"
+    K->>FW: consume "incident.stored"
+    FW->>AI: analyzeIncident(sanitizedSnippet) — direct function call
+    Note over AI: Returns {summary, root_cause, resolution, confidence}
+    FW->>K: produce "incident.analyzed" {incidentId, traceId, summary, root_cause, resolution, confidence}
 
     K->>IS: consume "incident.analyzed"
-    IS->>IS: Update ai_summary in DB
-    IS->>K: produce "audit.event"
-    IS->>K: produce "alert.created"
+    IS->>IS: UPDATE incidents SET ai_summary = {...}
+    IS->>K: produce "audit.event" {entity_id, traceId, action, details}
+    IS-->>K: produce "alert.created" (only if confidence > 0.7 AND severity high/critical)
 
-    K->>AS: consume "audit.event"
-    AS->>AS: Store audit_logs in DB
-
-    K->>AS: consume "alert.created"
-    AS->>AS: Store alert in DB
+    K->>AS: consume "audit.event" → INSERT audit_logs
+    K->>AS: consume "alert.created" → INSERT alerts
+    K->>AS: consume "policy.violation" → INSERT policy_logs (per violation)
 
     K->>NS: consume "alert.created"
-    NS->>NS: Send Slack + Email
-    NS->>NS: Store system_event in DB
+    NS->>NS: INSERT system_events
+    NS->>NS: Send Slack webhook
+    NS->>NS: Send Email via Resend
+    NS->>NS: Mark system_event processed
 ```
 
 ---
 
-## 4. Current Issues Found
+## 4. Service-by-Service Breakdown
 
-### 🔴 Critical — Build-Breaking / Always Fail
+### 4.1 API Gateway (:3000)
+| Aspect | Detail |
+|---|---|
+| **Role** | Single entry point, auth, rate limiting, caching, request proxying |
+| **Routes** | `/users/*` → User Service, `/incidents/*` → Incident Service, `/firewall/*` → Firewall Service |
+| **Middleware** | JWT auth (`@shared/utils`), Redis rate limiter, Redis cache with `X-Cache` headers |
+| **Headers** | Strips `host` and `content-length` before forwarding |
 
-#### C1. `moduleResolution: "bundler"` with `module: "CommonJS"` is Invalid
+### 4.2 User Service (:4000)
+| Aspect | Detail |
+|---|---|
+| **Role** | User registration, login, CRUD |
+| **Auth** | bcrypt password hashing, JWT token generation |
+| **Endpoints** | `POST /register`, `POST /login`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
+| **Health** | `GET /health` |
 
-**Affects:** Every single [tsconfig.json](file:///d:/Sentinel/tsconfig.json) in the project (root, shared-utils, all 5 services, gateway)
+### 4.3 Firewall Service (:4002)
+| Aspect | Detail |
+|---|---|
+| **Role** | Log ingestion, sanitization, AI analysis |
+| **HTTP** | `POST /api/ingest` (ingestion), `POST /api/analyze` (direct AI test) |
+| **Kafka Producer** | `incident.created`, `policy.violation` |
+| **Kafka Consumer** | `incident.stored` → calls Gemini → produces `incident.analyzed` |
+| **Sanitization** | 5 regex patterns + DB knowledge policies |
 
-TypeScript's `"bundler"` moduleResolution is designed **exclusively** for bundler-based setups (Vite, webpack). When using `module: "CommonJS"`, TypeScript mandates `moduleResolution: "node"` or `"node16"`.
+### 4.4 Incident Service (:4001)
+| Aspect | Detail |
+|---|---|
+| **Role** | Incident storage, CRUD, AI result updates |
+| **HTTP** | Full CRUD on `/incidents` (auth-protected) |
+| **Kafka Consumer 1** | `incident.created` → store + produce `incident.stored` |
+| **Kafka Consumer 2** | `incident.analyzed` → update `ai_summary` + produce `audit.event` + conditionally `alert.created` |
+| **Features** | Pagination, filtering, search, duplicate detection via `tempId` |
 
-**Fix:** Change `"moduleResolution": "bundler"` to `"moduleResolution": "node"` in every tsconfig.
+### 4.5 Audit Service (:4003)
+| Aspect | Detail |
+|---|---|
+| **Role** | Compliance and audit trail |
+| **Kafka Consumer** | `audit.event` → `audit_logs`, `alert.created` → `alerts`, `policy.violation` → `policy_logs` |
+| **Health** | `GET /health` |
 
----
-
-#### C2. `@shared/utils` in `devDependencies` Instead of `dependencies`
-
-**Affects:** [user-service/package.json](file:///d:/Sentinel/src/services/user-service/package.json), [incident-service/package.json](file:///d:/Sentinel/src/services/incident-service/package.json)
-
-These services import `@shared/utils` at runtime (e.g., `import { db } from "@shared/utils"`), but list it under `devDependencies`. In production Docker builds with `npm install --production`, this dependency won't be installed.
-
-**Fix:** Move `"@shared/utils": "*"` from `devDependencies` to `dependencies`.
-
----
-
-#### C3. Duplicate Kafka Producer in Incident Service
-
-**Affects:** [incident-service/kafka/kafka.ts](file:///d:/Sentinel/src/services/incident-service/src/kafka/kafka.ts) and [incident-service/kafka/producer.ts](file:///d:/Sentinel/src/services/incident-service/src/kafka/producer.ts)
-
-Two separate `kafka.producer()` instances are created:
-- [kafka.ts](file:///d:/Sentinel/packages/shared-utils/src/kafka.ts) exports `producer` (used by [consumer.ts](file:///d:/Sentinel/src/services/audit-service/src/kafka/consumer.ts))
-- [producer.ts](file:///d:/Sentinel/src/services/audit-service/src/kafka/producer.ts) creates **another** `producer` (used by [incidents.controller.ts](file:///d:/Sentinel/src/services/incident-service/src/controllers/incidents.controller.ts))
-
-The producer in [producer.ts](file:///d:/Sentinel/src/services/audit-service/src/kafka/producer.ts) is **never connected** (its [initProducer()](file:///d:/Sentinel/src/services/incident-service/src/kafka/producer.ts#7-11) is never called in [server.ts](file:///d:/Sentinel/src/services/user-service/src/server.ts)). This means [sendIncidentEvent](file:///d:/Sentinel/src/services/incident-service/src/kafka/producer.ts#12-27) will throw at runtime.
-
-**Fix:** Remove the duplicate producer in [producer.ts](file:///d:/Sentinel/src/services/audit-service/src/kafka/producer.ts). Import the shared producer from [kafka.ts](file:///d:/Sentinel/packages/shared-utils/src/kafka.ts) and use it everywhere.
-
----
-
-#### C4. Kafka Message Key is a Static String
-
-**Affects:** [firewall-service/kafka/producer.ts](file:///d:/Sentinel/src/services/firewall-service/src/kafka/producer.ts#L21)
-
-```typescript
-key: "event.tempId",  // ← string literal, not the variable
-```
-
-This should be `key: event.tempId` (without quotes) to use the actual UUID as the partition key.
-
----
-
-#### C5. [sanitizeLogs()](file:///d:/Sentinel/packages/shared-utils/src/sanitizeLogs.ts#24-109) Returns Parsed Object, Not String
-
-**Affects:** [firewall-service/kafka/producer.ts](file:///d:/Sentinel/src/services/firewall-service/src/kafka/producer.ts#L13)
-
-[sanitizeLogs(db, log.message)](file:///d:/Sentinel/packages/shared-utils/src/sanitizeLogs.ts#24-109) is called where the second argument should be the full `log` object, not just `log.message`. The function expects `logs: any` and does `JSON.stringify(sanitized)` / `JSON.parse(dataString)` — it returns a parsed JSON object, but `sanitizedSnippet` of [IncidentCreatedEvent](file:///d:/Sentinel/packages/shared-utils/src/types.ts#1-11) expects a `string`.
+### 4.6 Notification Service (:4004)
+| Aspect | Detail |
+|---|---|
+| **Role** | External notifications |
+| **Kafka Consumer** | `alert.created` → Slack webhook + Email via Resend |
+| **Health** | `GET /health` |
 
 ---
 
-#### C6. Gateway Service Registry Ports Are Wrong
+## 5. Kafka Topic Registry
 
-**Affects:** [gateway/serviceRegistry.ts](file:///d:/Sentinel/src/gateway/src/utils/serviceRegistry.ts)
-
-| Service | Registry Port | Actual Port |
-|---|---|---|
-| users | 4002 | 4000 |
-| firewall | 4003 | 4002 |
-| ai | 4004 | N/A |
-
-The ports don't match Docker Compose or service startup. The gateway will proxy to wrong services.
-
-**Fix:** Correct the mapping:
-```typescript
-users: process.env.USER_SERVICE_URL || "http://localhost:4000",
-firewall: process.env.FIREWALL_SERVICE_URL || "http://localhost:4002",
-```
+| Topic | Producer | Consumer(s) | traceId | Payload |
+|---|---|---|---|---|
+| `incident.created` | Firewall | Incident | ✅ | tempId, traceId, source, severity, sanitizedSnippet |
+| `incident.stored` | Incident | Firewall AI | ✅ | incidentId, tempId, traceId, sanitizedSnippet |
+| `incident.analyzed` | Firewall AI | Incident | ✅ | incidentId, traceId, summary, root_cause, resolution, confidence |
+| `incident.manual_created` | Incident REST | — | ❌ | Raw Incident object (from CRUD API) |
+| `audit.event` | Incident | Audit | ✅ | entity_type, entity_id, traceId, action, details |
+| `alert.created` | Incident | Audit, Notification | ✅ | incident_id, traceId, severity, message |
+| `policy.violation` | Firewall | Audit | ✅ | tempId, traceId, violations[] |
 
 ---
 
-### 🟠 Major — Logic/Design Issues
-
-#### M1. Firewall AI Worker Calls Itself via HTTP
-
-**Affects:** [firewall-service/kafka/consumer.ts](file:///d:/Sentinel/src/services/firewall-service/src/kafka/consumer.ts#L27-28)
-
-The Kafka consumer within the firewall service makes an HTTP call to `http://localhost:4002/api/analyze` (its own Express server). This creates a fragile self-loop. In Docker, `localhost` will fail since the consumer runs in the same container.
-
-**Fix:** Import and call the AI analysis function directly instead of via HTTP, or use the Docker service name.
-
----
-
-#### M2. Incident Service Has No HTTP Server
-
-**Affects:** [incident-service/server.ts](file:///d:/Sentinel/src/services/incident-service/src/server.ts)
-
-The incident service only starts Kafka consumers. It never creates an Express app or calls `app.listen()`. But the gateway proxies HTTP requests to `http://localhost:4001/incidents`. Those requests will fail.
-
-It has routes, controllers, and helpers ready, but they're never mounted on an Express server.
-
-**Fix:** Add Express server initialization alongside the Kafka consumers.
-
----
-
-#### M3. User Service Missing `express.json()` Middleware
-
-**Affects:** [user-service/server.ts](file:///d:/Sentinel/src/services/user-service/src/server.ts)
-
-No `app.use(express.json())` call. All POST/PATCH endpoints that read `req.body` will get `undefined`.
-
----
-
-#### M4. `incident.created` Topic Conflict — Two Producers
-
-The firewall service produces `incident.created` events via Kafka (the intended flow), but the incident-service controller also produces to `incident.created` via its REST API + [sendIncidentEvent()](file:///d:/Sentinel/src/services/incident-service/src/kafka/producer.ts#12-27). These are different event schemas:
-- Firewall produces [IncidentCreatedEvent](file:///d:/Sentinel/packages/shared-utils/src/types.ts#1-11) (has `tempId`, `sanitizedSnippet`)
-- Controller produces a raw [Incident](file:///d:/Sentinel/src/services/incident-service/src/helpers/incidents.helpers.ts#3-16) object (has `title`, `description`)
-
-The consumer expects [IncidentCreatedEvent](file:///d:/Sentinel/packages/shared-utils/src/types.ts#1-11) shape. Events from the REST API will cause parse failures or silent data corruption.
-
----
-
-#### M5. `alert.created` Fired Unconditionally
-
-**Affects:** [incident-service/kafka/consumer.ts](file:///d:/Sentinel/src/services/incident-service/src/kafka/consumer.ts#L58-71)
-
-Every analyzed incident produces an `alert.created` event with `severity: "high"` and a hardcoded message, regardless of the actual incident severity. This creates alert fatigue.
-
-**Fix:** Only produce alerts when AI analysis reports high confidence + high severity.
-
----
-
-#### M6. `redisClient` Event Listeners Re-Attached on Every Call
-
-**Affects:** [shared-utils/redisClient.ts](file:///d:/Sentinel/packages/shared-utils/src/redisClient.ts)
-
-[getRedisClient()](file:///d:/Sentinel/packages/shared-utils/src/redisClient.ts#11-28) re-attaches `.on("connect")` and `.on("error")` handlers every time it's called. Over time, this leaks event listeners.
-
-**Fix:** Move event listener attachment inside the `if (!redisClient)` block.
-
----
-
-#### M7. Gateway Forwarding `req.headers` to Services
-
-The gateway forwards raw `req.headers` (including `host`, `content-length`, etc.) to backend services via axios. This can cause request failures or misrouted requests because the `Host` header will refer to the gateway, not the service.
-
----
-
-#### M8. Firewall Routes File Typo
-
-**Affects:** filename [anayzer.routes.ts](file:///d:/Sentinel/src/services/firewall-service/src/routes/anayzer.routes.ts) should be `analyzer.routes.ts`.
-
----
-
-### 🟡 Moderate — Incomplete Implementations
-
-#### I1. Firewall Ingest Controller Skips Sanitization
-
-**Affects:** [firewall-service/controllers/ingestLogs.ts](file:///d:/Sentinel/src/services/firewall-service/src/controllers/ingestLogs.ts)
-
-The controller directly calls [produceCreateIncidentEvent(logs)](file:///d:/Sentinel/src/services/firewall-service/src/kafka/producer.ts#7-30) without any validation. The actual sanitization happens inside the producer function, which is a layer violation. The controller should validate and potentially batch the logs.
-
----
-
-#### I2. [sanitizeLogs()](file:///d:/Sentinel/packages/shared-utils/src/sanitizeLogs.ts#24-109) — Commented-Out System Events & Alerts
-
-**Affects:** [shared-utils/sanitizeLogs.ts](file:///d:/Sentinel/packages/shared-utils/src/sanitizeLogs.ts#L76-103)
-
-System event recording and alert creation for policy violations are commented out. The function only records `policy_logs`.
-
----
-
-#### I3. No `ingest.analyzed` or Policy Violation Events
-
-Per your architecture, the firewall should produce `ingest.analyzed` and policy violation events. Currently it only produces `incident.created`. Policy violations are logged to the DB but not emitted as Kafka events.
-
----
-
-#### I4. Audit-Service & Notification-Service Have No HTTP Server
-
-Neither service exposes an HTTP endpoint. Docker Compose maps ports 4003 and 4004 and the gateway has env vars for `AUDIT_SERVICE_URL` and `NOTIFICATION_SERVICE_URL`, but no routes exist for them. Health checks will fail.
-
----
-
-#### I5. Incident-Service Auth Middleware & Rate Limiter — Unused
-
-The incident service has [authMiddleware.ts](file:///d:/Sentinel/src/services/incident-service/src/middlewares/authMiddleware.ts) and [rateLimiter.ts](file:///d:/Sentinel/src/services/incident-service/src/middlewares/rateLimiter.ts) but neither is used (no Express app exists).
-
----
-
-#### I6. [knexfile.root.ts](file:///d:/Sentinel/knexfile.root.ts) Imports Wrong Export
-
-[knexfile.root.ts](file:///d:/Sentinel/knexfile.root.ts) does `import {knexConfig} from "@shared/utils"` but [db/knexfile.ts](file:///d:/Sentinel/packages/shared-utils/src/db/knexfile.ts) uses `export default knexConfig` which is not re-exported as a named export from [index.ts](file:///d:/Sentinel/src/gateway/src/index.ts) — it's re-exported as `export * from "./db/knexfile"` which brings in the default as... nothing (default exports are not re-exported by `export *`).
-
----
-
-#### I7. [.env](file:///d:/Sentinel/.env) Path Resolution May Fail in Docker
-
-[shared-utils/env.ts](file:///d:/Sentinel/packages/shared-utils/src/env.ts) resolves [.env](file:///d:/Sentinel/.env) via `path.resolve(__dirname, "../../../.env")`. In Docker, `__dirname` will be a `dist/` folder and `../../../.env` may not resolve to the correct path. Docker Compose already provides env vars, so this won't crash Docker—but it makes local development fragile.
-
----
-
-### 🟢 Minor — Code Quality / Cleanup
-
-| # | Issue | Location |
-|---|---|---|
-| Q1 | Deprecated types packages (`@types/dotenv`, `@types/axios`, `@types/ioredis`, `@types/kafkajs`, `@types/knex`) — these packages ship their own typings now | Multiple [package.json](file:///d:/Sentinel/package.json) files |
-| Q2 | Auth middleware duplicated across 3 places (gateway, incident-service, user-service) — should be in `@shared/utils` | Multiple services |
-| Q3 | `concurrently` used in root scripts but not installed | Root [package.json](file:///d:/Sentinel/package.json) |
-| Q4 | Hardcoded email `bengupta786@gmail.com` as sender | [email.ts](file:///d:/Sentinel/src/services/notification-service/src/integrations/email.ts) |
-| Q5 | Seed file uses plaintext `hashed_password1` — should use bcrypt | [01_users.ts](file:///d:/Sentinel/packages/shared-utils/src/db/seeds/01_users.ts) |
-| Q6 | Gateway [tsconfig.json](file:///d:/Sentinel/tsconfig.json) `extends` path is `../../tsconfig.json` (2 levels up) while services use `../../../tsconfig.json` (3 levels up) — this is correct but inconsistent | Various |
-| Q7 | `dist/` folders committed or generated alongside source | Multiple services |
-| Q8 | Empty [producer.ts](file:///d:/Sentinel/src/services/audit-service/src/kafka/producer.ts) files in audit-service and notification-service | [audit producer](file:///d:/Sentinel/src/services/audit-service/src/kafka/producer.ts), [notification producer](file:///d:/Sentinel/src/services/notification-service/src/kafka/producer.ts) |
-| Q9 | Lots of commented-out code (sliding window log, token bucket implementations in rate limiter) | [rateLimiter.ts](file:///d:/Sentinel/src/gateway/src/middlewares/rateLimiter.ts) |
-| Q10 | `pg` module only in root but not in individual services | Root package.json |
-
----
-
-## 5. Database Schema Summary
+## 6. Database Schema
 
 ```mermaid
 erDiagram
+    users ||--o{ incidents : "reported_by / assigned_to"
+    users ||--o{ team_members : "member"
+    teams ||--o{ team_members : "has"
+    teams ||--o{ incidents : "team_id"
+    incidents ||--o{ alerts : "incident_id"
+    incidents ||--o{ policy_logs : "incident_id"
+    knowledge_policies ||--o{ policy_logs : "policy_id"
+    users ||--o{ audit_logs : "user_id"
+    users ||--o{ knowledge_policies : "created_by"
+
     users {
         UUID id PK
         VARCHAR name
         VARCHAR email UK
         VARCHAR password_hash
         VARCHAR role
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ updated_at
     }
-
     teams {
         UUID id PK
         VARCHAR name UK
         TEXT description
-        TIMESTAMPTZ created_at
     }
-
     team_members {
         UUID id PK
         UUID team_id FK
         UUID user_id FK
         VARCHAR role_in_team
-        TIMESTAMPTZ joined_at
     }
-
     incidents {
         UUID id PK
         UUID temp_id UK
@@ -380,44 +230,22 @@ erDiagram
         TEXT description
         VARCHAR severity
         VARCHAR status
-        UUID reported_by FK
-        UUID assigned_to FK
-        UUID team_id FK
         JSONB ai_summary
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ updated_at
     }
-
     knowledge_policies {
         UUID id PK
         VARCHAR name
-        TEXT description
         TEXT_ARRAY blocked_keywords
         TEXT_ARRAY allowed_domains
         UUID created_by FK
-        TIMESTAMPTZ created_at
     }
-
     policy_logs {
         UUID id PK
-        UUID user_id FK
         UUID incident_id FK
         UUID policy_id FK
         TEXT detected_violation
-        TEXT ai_response_snippet
         VARCHAR action_taken
-        TIMESTAMPTZ created_at
     }
-
-    system_events {
-        UUID id PK
-        VARCHAR event_type
-        VARCHAR source
-        JSONB payload
-        BOOLEAN processed
-        TIMESTAMPTZ created_at
-    }
-
     audit_logs {
         UUID id PK
         UUID user_id FK
@@ -425,130 +253,309 @@ erDiagram
         UUID entity_id
         VARCHAR action
         JSONB details
-        TIMESTAMPTZ created_at
     }
-
     alerts {
         UUID id PK
         UUID incident_id FK
-        UUID triggered_by FK
         TEXT message
         VARCHAR severity
         BOOLEAN acknowledged
-        TIMESTAMPTZ created_at
     }
-
-    users ||--o{ team_members : "member"
-    teams ||--o{ team_members : "has"
-    users ||--o{ incidents : "reported_by"
-    users ||--o{ incidents : "assigned_to"
-    teams ||--o{ incidents : "team_id"
-    incidents ||--o{ policy_logs : "incident_id"
-    knowledge_policies ||--o{ policy_logs : "policy_id"
-    incidents ||--o{ alerts : "incident_id"
-    users ||--o{ audit_logs : "user_id"
-    users ||--o{ knowledge_policies : "created_by"
+    system_events {
+        UUID id PK
+        VARCHAR event_type
+        VARCHAR source
+        JSONB payload
+        BOOLEAN processed
+    }
 ```
 
 ---
 
-## 6. Prioritized Implementation Plan
+## 7. Remaining Minor Items
 
-Since you want to understand and implement each piece yourself, here's the recommended order. **Each phase is independent enough to be tackled as a learning unit.**
-
-### Phase 1: Fix TypeScript Config (Get It Building)
-> **Goal:** Make `tsc` compile successfully across all packages
-
-1. Change `moduleResolution` from `"bundler"` to `"node"` in all 8 [tsconfig.json](file:///d:/Sentinel/tsconfig.json) files
-2. Remove deprecated `@types/*` packages that ship built-in types
-3. Add `"declaration": true` to service tsconfigs if you want to reference compiled output
-4. Verify: run `npx tsc --noEmit` in each service directory
-
-### Phase 2: Fix Shared-Utils Foundation
-> **Goal:** Make the shared package reliable
-
-1. Fix [redisClient.ts](file:///d:/Sentinel/packages/shared-utils/src/redisClient.ts) — move event listeners inside the init block
-2. Fix [knexfile.root.ts](file:///d:/Sentinel/knexfile.root.ts) — use `export default` correctly or change the named export
-3. Fix [env.ts](file:///d:/Sentinel/packages/shared-utils/src/env.ts) — make [.env](file:///d:/Sentinel/.env) path resolution work in both local and Docker
-4. Move `@shared/utils` from `devDependencies` to `dependencies` in incident-service and user-service
-5. Verify: `npm run build` in `packages/shared-utils`
-
-### Phase 3: Fix Individual Services (One at a Time)
-> **Goal:** Each service starts and handles its responsibilities
-
-**Firewall Service:**
-1. Fix Kafka message key from string literal to variable in `producer.ts`
-2. Fix `sanitizeLogs()` call — pass the full log object and handle the return type
-3. Refactor AI worker to call analyzer function directly instead of via HTTP
-4. Rename `anayzer.routes.ts` → `analyzer.routes.ts`
-
-**Incident Service:**
-1. Add Express server (`app.listen(4001)`) with routes mounted
-2. Remove duplicate producer in `producer.ts` — use the one from `kafka.ts`
-3. Fix `sendIncidentEvent` to produce correct event schema or remove it
-4. Add `express.json()` middleware
-5. Decide whether incident CRUD via REST should also produce events (and what schema)
-
-**User Service:**
-1. Add `app.use(express.json())` to `server.ts`
-
-**Audit Service:**
-1. Add basic Express server with health endpoint on port 4003
-
-**Notification Service:**
-1. Add basic Express server with health endpoint on port 4004
-
-### Phase 4: Fix Gateway & Service Registry
-> **Goal:** Gateway correctly routes to all services
-
-1. Fix port mappings in `serviceRegistry.ts`
-2. Strip or sanitize forwarded headers (remove `host`, `content-length`)
-3. Move auth middleware to `@shared/utils` to eliminate duplication
-
-### Phase 5: Complete the Event Flow
-> **Goal:** Full pipeline works end-to-end
-
-1. Add `ingest.analyzed` event emission from firewall after sanitization
-2. Un-comment and implement system_events recording in `sanitizeLogs()`
-3. Make `alert.created` conditional based on actual severity
-4. Add policy violation events via Kafka
-5. Wire up notification-service to consume from `audit.event` OR `alert.created` (decide on one)
-
-### Phase 6: Production Hardening
-> **Goal:** Ready for Docker + deployment
-
-1. Add health-check endpoints to all services
-2. Add graceful shutdown (Kafka disconnect, DB destroy) to all services
-3. Set up proper `.env` handling for Docker vs local
-4. Add proper error handling for Kafka consumer crashes (retry logic)
-5. Remove all `dist/` directories from version control (add to `.gitignore`)
-6. Add `concurrently` to root dev dependencies
-
----
-
-## 7. Kafka Topic Registry
-
-| Topic | Producer | Consumer | Status |
+| # | Issue | Priority | Action |
 |---|---|---|---|
-| `incident.created` | Firewall Service | Incident Service | ✅ Working (schema mismatch with REST API) |
-| `incident.stored` | Incident Service | Firewall AI Worker | ✅ Working |
-| `incident.analyzed` | Firewall AI Worker | Incident Service | ✅ Working |
-| `audit.event` | Incident Service | Audit Service | ✅ Working |
-| `alert.created` | Incident Service | Audit Service, Notification Service | ⚠️ Always fires (should be conditional) |
-| `ingest.analyzed` | — | — | ❌ Not implemented |
-| `policy.violation` | — | — | ❌ Not implemented |
+| 1 | Empty `notification-service/kafka/producer.ts` | Low | Delete file |
+| 2 | Commented-out code in analyzer.ts (lines 7-16) | Low | Clean up |
+| 3 | Commented-out code in incident-service consumer (lines 23-26) | Low | Clean up |
+| 4 | `serviceRegistry.ts` has `ai` entry pointing to 4004 | Low | Remove — AI is now an internal function, not a service |
+| 5 | `docker-compose.yml` missing `GOOGLE_GENAI_API_KEY` env for firewall | Medium | Already present ✅ |
+| 6 | `docker-compose.yml` missing `EMAIL_FROM` env for notification | Medium | Add `EMAIL_FROM: ${EMAIL_FROM}` |
+| 7 | `docker-compose.yml` missing `JWT_SECRET` for gateway/incident | Medium | Add to gateway and incident-service environments |
+| 8 | `docker-compose.yml` missing `REDIS_URL` for gateway | Medium | Already uses hardcoded `redis://redis:6379` ✅ |
+| 9 | `incident.manual_created` topic has no consumer | Low | OK for now — it's a fire-and-forget audit trail |
 
 ---
 
-## 8. What's Already Working Well
+## 8. How to Test the Complete Pipeline
 
-- ✅ **Overall architecture vision** is sound — event-driven microservices with clear separation
-- ✅ **Sanitization engine** with regex patterns + DB-driven knowledge policies is well-designed
-- ✅ **Structured AI output** using Gemini's `responseSchema` for typed JSON responses  
-- ✅ **Shared DB approach** via `@shared/utils` is pragmatic for single-DB deployment
-- ✅ **DB schema** is well-normalized with proper FK constraints, indexes, and UUIDs
-- ✅ **Rate limiter** using Redis with sliding window is production-quality
-- ✅ **Cache middleware** with `X-Cache: HIT/MISS` headers is well-structured
-- ✅ **Docker Compose** config is comprehensive with health checks and proper network setup
-- ✅ **Duplicate detection** in incident consumer using `temp_id` is smart
-- ✅ **User service** with bcrypt hashing and JWT is correctly implemented
+### Prerequisites
+1. **PostgreSQL** running (local or cloud — e.g., Neon, Supabase)
+2. **Kafka + Zookeeper** running (via Docker Compose or local)
+3. **Redis** running
+4. **Google Gemini API key** set in `.env`
+
+### Step 1: Setup
+
+```bash
+# Clone and install
+cd d:\Sentinel
+npm install
+
+# Setup .env from .env.example
+cp .env.example .env
+# Fill in: DATABASE_URL, JWT_SECRET, REDIS_URL, KAFKA_BROKER,
+#          GOOGLE_GENAI_API_KEY, SLACK_WEBHOOK_URL (optional),
+#          RESEND_API_KEY (optional), EMAIL_FROM
+
+# Build shared-utils first
+cd packages/shared-utils
+npm run build
+
+# Run migrations
+npx knex migrate:latest --knexfile knexfile.root.ts
+
+# Seed users
+npx knex seed:run --knexfile knexfile.root.ts
+```
+
+### Step 2: Start Services (local)
+
+```bash
+# Terminal 1: API Gateway
+cd src/gateway && npx ts-node src/index.ts
+
+# Terminal 2: User Service
+cd src/services/user-service && npx ts-node src/server.ts
+
+# Terminal 3: Firewall Service
+cd src/services/firewall-service && npx ts-node src/server.ts
+
+# Terminal 4: Incident Service
+cd src/services/incident-service && npx ts-node src/server.ts
+
+# Terminal 5: Audit Service
+cd src/services/audit-service && npx ts-node src/server.ts
+
+# Terminal 6: Notification Service
+cd src/services/notification-service && npx ts-node src/server.ts
+```
+
+Or with Docker:
+```bash
+docker compose up --build
+```
+
+### Step 3: Test the Flow
+
+```bash
+# 1. Register a user
+curl -X POST http://localhost:3000/users/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test User","email":"test@example.com","password":"password123"}'
+
+# Save the JWT token from the response
+
+# 2. Login
+curl -X POST http://localhost:3000/users/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
+
+# 3. Ingest a log (this triggers the full pipeline)
+curl -X POST http://localhost:3000/firewall/api/ingest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "logs": {
+      "source": "payment-service",
+      "severity": "high",
+      "message": "Error: Connection refused to database at 192.168.1.100. User admin@company.com reported token=abc123xyz failed. API key=sk-proj-1234567890abcdef"
+    }
+  }'
+
+# 4. Wait 5-10 seconds for the pipeline to complete, then fetch incidents
+curl http://localhost:3000/incidents \
+  -H "Authorization: Bearer <your-jwt-token>"
+
+# The response should show the incident with:
+# - sanitized_snippet (emails, IPs, tokens replaced with [REDACTED_*])
+# - ai_summary (summary, root_cause, resolution, confidence from Gemini)
+```
+
+### What to expect in the logs:
+
+```
+[Firewall]   Knowledge Firewall service running on 4002
+[Firewall]   Incident created with tempId: abc-123...
+[Incident]   Received incident created event: abc-123
+[Incident]   Incident stored with ID: def-456 from tempId: abc-123
+[Firewall]   Received incident event for sanitization: def-456
+[Firewall]   AI summary received: { summary: "...", root_cause: "...", ... }
+[Firewall]   Analysis done → def-456 [trace: xyz-789]
+[Incident]   Incident def-456 updated with AI summary
+[Audit]      Audit log created for incident def-456 action ai_summary_updated
+[Audit]      Alert created for incident def-456 with severity high
+[Notification] Alert notification sent
+```
+
+---
+
+## 9. Client Integration Strategy
+
+### How a user integrates Sentinel into their project
+
+There are 3 tiers of integration:
+
+### Tier 1: Direct HTTP (Zero Dependencies)
+
+Any project can POST raw logs to your ingest endpoint:
+
+```javascript
+// In any Node.js project — zero dependencies
+fetch("https://your-sentinel-host/firewall/api/ingest", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    logs: {
+      source: "my-app",
+      severity: "high",
+      message: error.stack || error.message,
+      traceId: requestId, // optional — for correlation
+    }
+  })
+});
+```
+
+### Tier 2: NPM SDK Package (`@sentinel/sdk`)
+
+Publish a lightweight SDK that wraps the HTTP call with error handling, batching, and auto-capture:
+
+```typescript
+// @sentinel/sdk — what you'd build and publish to npm
+import { Sentinel } from "@sentinel/sdk";
+
+const sentinel = new Sentinel({
+  endpoint: "https://your-sentinel-host",
+  apiKey: "project-api-key",  // project-level auth (new feature needed)
+  source: "payment-service",
+});
+
+// Manual capture
+sentinel.captureException(error, { severity: "high" });
+
+// Auto-capture — wraps process.on('uncaughtException')
+sentinel.enableAutoCapture();
+
+// Express middleware
+app.use(sentinel.expressErrorHandler());
+```
+
+**SDK internals would:**
+- Batch logs (buffer 5 seconds before sending)
+- Auto-retry with exponential backoff
+- Attach source, timestamp, traceId automatically
+- Provide Express/Fastify middleware for auto-capture
+
+### Tier 3: Sentry-Compatible Webhook
+
+Accept Sentry's webhook format so users can configure Sentinel as a Sentry webhook destination — zero code changes to existing Sentry setups.
+
+---
+
+## 10. Frontend Dashboard Plan
+
+### What the Dashboard Shows
+
+| View | Data Source | API Endpoint (to build) |
+|---|---|---|
+| **Incident List** | `incidents` table | `GET /incidents` ✅ (already exists, with pagination/filters) |
+| **Incident Detail** | `incidents` + `ai_summary` | `GET /incidents/:id` ✅ (already exists) |
+| **AI Analysis Card** | `incidents.ai_summary` JSONB | Included in incident detail ✅ |
+| **Policy Violations** | `policy_logs` table | `GET /policy-logs` ❌ (needs new endpoint) |
+| **Audit Trail** | `audit_logs` table | `GET /audit-logs` ❌ (needs new endpoint) |
+| **Alerts Feed** | `alerts` table | `GET /alerts` ❌ (needs new endpoint) |
+| **System Events** | `system_events` table | `GET /system-events` ❌ (needs new endpoint) |
+| **Knowledge Policies** | `knowledge_policies` table | CRUD `/policies` ❌ (needs new endpoints) |
+| **Dashboard Stats** | Aggregated queries | `GET /stats` ❌ (needs new endpoint) |
+| **Real-time Updates** | Kafka → WebSocket | WebSocket gateway ❌ (needs new feature) |
+
+### New API Endpoints Needed for Dashboard
+
+```
+# Read-only endpoints (add to incident-service or gateway)
+GET  /api/stats                     → { totalIncidents, openCount, resolvedCount, avgConfidence }
+GET  /api/policy-logs               → paginated policy violation logs
+GET  /api/audit-logs                → paginated audit trail
+GET  /api/alerts                    → paginated alert feed
+GET  /api/alerts/:id/acknowledge    → mark alert as acknowledged
+
+# Knowledge policy management (add to firewall-service)
+GET    /api/policies                → list all policies
+POST   /api/policies                → create new policy
+PATCH  /api/policies/:id            → update policy
+DELETE /api/policies/:id            → delete policy
+
+# Real-time (add WebSocket support to gateway)
+WS /ws/incidents                    → real-time incident feed
+```
+
+### Recommended Frontend Stack
+
+| Choice | Why |
+|---|---|
+| **Next.js** | SSR for SEO, API routes as BFF, excellent DX |
+| **shadcn/ui** | Production-grade components, dark mode built-in |
+| **Recharts** | Lightweight charting for stats dashboard |
+| **Socket.io** | Real-time incident feed via WebSocket |
+| **TanStack Query** | Data fetching with caching and real-time refetch |
+
+### Dashboard Pages
+
+```
+/dashboard          → Stats overview, recent incidents, severity distribution chart
+/incidents          → Filterable incident list (status, severity, date range)
+/incidents/:id      → Incident detail with AI analysis card showing:
+                       • Summary, Root Cause, Resolution, Confidence score
+                       • Sanitized log snippet
+                       • Policy violations triggered
+                       • Audit trail timeline
+/alerts             → Alert feed with acknowledge buttons
+/policies           → Knowledge policy CRUD
+/settings           → Team management, notification preferences
+```
+
+---
+
+## 11. What to Build Next (Priority Order)
+
+| # | Feature | Why | Effort |
+|---|---|---|---|
+| 1 | **Project/API Key auth** | Clients need project-level auth for log ingestion (separate from user JWT) | Medium |
+| 2 | **Read-only dashboard API endpoints** | Stats, policy-logs, audit-logs, alerts | Low |
+| 3 | **Knowledge policy CRUD endpoints** | Manage policies via dashboard | Low |
+| 4 | **Frontend dashboard** | The user-facing product | High |
+| 5 | **@sentinel/sdk npm package** | Quick client integration | Medium |
+| 6 | **WebSocket real-time feed** | Live incident updates on dashboard | Medium |
+| 7 | **Incident timeline view** | Show full lifecycle via traceId correlation | Medium |
+
+---
+
+## 12. Architecture Verification ✅
+
+| Requirement | Status |
+|---|---|
+| Log ingestion via HTTP | ✅ `POST /api/ingest` |
+| Prompt firewall (sanitization before AI) | ✅ Regex + DB policies |
+| AI-powered analysis | ✅ Gemini 2.5 Flash with structured JSON output |
+| Event-driven architecture | ✅ 7 Kafka topics |
+| traceId propagation | ✅ Through every event |
+| Duplicate detection | ✅ Via `tempId` |
+| Conditional alerting | ✅ confidence > 0.7 + high/critical |
+| Audit trail | ✅ `audit_logs`, `system_events`, `policy_logs` |
+| Notifications | ✅ Slack + Email via Resend |
+| Auth & rate limiting | ✅ JWT + Redis rate limiter |
+| Caching | ✅ Redis with X-Cache headers |
+| Health checks | ✅ All services have `/health` |
+| Docker deployment | ✅ docker-compose.yml |
+
+**The backend architecture is complete.** Next step is choosing between building the dashboard or the SDK first.

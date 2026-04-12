@@ -24,7 +24,8 @@ const staticPatterns = [
 export async function sanitizeLogs(
   db: Knex,
   logs: any,
-  userId?: string
+  userId?: string,
+  traceId?: string
 ) {
   let sanitized = JSON.parse(JSON.stringify(logs));
   let dataString = JSON.stringify(sanitized);
@@ -61,7 +62,6 @@ export async function sanitizeLogs(
       for (const domain of policy.allowed_domains) {
         const domainRegex = new RegExp(domain.replace(/\./g, "\\."), "gi");
         if (!domainRegex.test(dataString)) {
-          // optional: record violation for disallowed domain usage
           matched = true;
           triggeredPolicies.push({
             policy,
@@ -73,36 +73,22 @@ export async function sanitizeLogs(
     }
 
     if (matched) {
-      // Record event in system_events
+      // Record event in system_events (traceId enables backfill of incident_id later)
       await db("system_events").insert({
         event_type: "POLICY_TRIGGERED",
         source: "firewall_sanitization",
         payload: JSON.stringify({
           policy_id: policy.id,
-          incident_id: null, // incident id is not available at this point
           user_id: userId || null,
+          traceId: traceId || null,
+          triggered_keywords: triggeredPolicies.map(p => p.keyword),
         }),
-      });
-
-      // Record detailed policy log
-      await db("policy_logs").insert({
-        user_id: userId || null,
-        incident_id: null,
-        policy_id: policy.id,
-        detected_violation: triggeredPolicies.map((p) => p.keyword).join(", "),
-        ai_response_snippet: dataString.slice(0, 500),
-        action_taken: "redacted",
-      });
-
-      // Create alert (optional)
-      await db("alerts").insert({
-        incident_id: null , // incident id is not available at this point
-        triggered_by: userId || null,
-        message: `Policy "${policy.name}" triggered on incident that is yet not available`,// incident id will be available when incident is created
-        severity: "medium",
       });
     }
   }
 
-  return dataString;
+  return {
+    sanitizedData:dataString,
+    triggeredPolicies
+  };
 }

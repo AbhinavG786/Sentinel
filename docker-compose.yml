@@ -16,6 +16,7 @@ services:
       NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL}
       KAFKA_BROKER: ${KAFKA_BROKER}
       REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
     depends_on:
       - user-service
       - incident-service
@@ -57,6 +58,7 @@ services:
       REDIS_URL: ${REDIS_URL}
       DATABASE_URL: ${DATABASE_URL}
       KAFKA_BROKER: ${KAFKA_BROKER}
+      JWT_SECRET: ${JWT_SECRET}
     depends_on:
       # postgres:
       #   condition: service_healthy
@@ -116,6 +118,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY}
       DATABASE_URL: ${DATABASE_URL}
       KAFKA_BROKER: ${KAFKA_BROKER}
+      EMAIL_FROM: ${EMAIL_FROM}
     depends_on:
       # postgres:
       #   condition: service_healthy

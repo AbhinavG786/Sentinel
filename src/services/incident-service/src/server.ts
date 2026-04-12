@@ -3,15 +3,19 @@ import { consumeIncidentCreatedEvent } from "./kafka/consumer";
 import { startAIUpdateConsumer } from "./kafka/consumer";
 import { getRedisClient } from "@shared/utils";
 import express from "express";
-import incidentsRouter from "./routes/incidents.route";  
+import incidentsRouter from "./routes/incidents.route";
+import statsRouter from "./routes/stats.route";
+import alertsRouter from "./routes/alerts.route";
 import { authenticate } from "@shared/utils";
 
-const app = express();  
+const app = express();
 app.use(express.json());
 
 export const redisClient = getRedisClient();
 
-app.use("/incidents",authenticate,incidentsRouter);
+app.use("/incidents", authenticate, incidentsRouter);
+app.use("/stats", statsRouter);
+app.use("/alerts", authenticate, alertsRouter);
 
 (async () => {
   await initKafka();

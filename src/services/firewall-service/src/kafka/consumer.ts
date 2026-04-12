@@ -23,27 +23,16 @@ export const aiAnalyzer = async () => {
       );
 
       try {
-        // const analysis: any = await axios.post(
-        //   "http://localhost:4004/api/analyze",
-        //   {
-        //     incident: incident.sanitizedSnippet,
-        //   }
-        // );
         const analysis: any = await analyzeIncident(incident.sanitizedSnippet);
-        //  const summary = analysis.data.summary;
         console.log(" AI summary received:", analysis.summary);
-
-        // await db("incidents").where({ id: incident.id }).update({
-        //   ai_analysis: summary,
-        // });
 
         const analyzedEvent: IncidentAnalyzedEvent = {
           incidentId: incident.incidentId,
+          traceId: incident.traceId,
           ...analysis,
           analyzedAt: new Date().toISOString(),
         };
 
-        // Step 4: Send to Kafka for incident update
         await producer.send({
           topic: "incident.analyzed",
           messages: [
@@ -51,7 +40,7 @@ export const aiAnalyzer = async () => {
           ],
         });
 
-        console.log(` Analysis done → ${incident.incidentId}`);
+        console.log(` Analysis done → ${incident.incidentId} [trace: ${incident.traceId}]`);
       } catch (err: any) {
         console.error("AI Analysis Error:", err.message);
       }

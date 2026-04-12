@@ -17,7 +17,7 @@ export const startAIUpdateConsumer = async () => {
     eachMessage: async ({ message }) => {
       if (!message.value)
         return;
-      const { incidentId, summary, root_cause, resolution, confidence } =
+      const { incidentId, traceId, summary, root_cause, resolution, confidence } =
         JSON.parse(message.value!.toString()) as IncidentAnalyzedEvent;
 
       //   await pool.query(
@@ -42,6 +42,7 @@ export const startAIUpdateConsumer = async () => {
             value: JSON.stringify({
               entity_type: "incident",
               entity_id: incidentId,
+              traceId,
               action: "ai_summary_updated",
               details: {
                 summary: summary,
@@ -63,6 +64,7 @@ export const startAIUpdateConsumer = async () => {
           {
             value: JSON.stringify({
               incident_id: incidentId,
+              traceId,
               triggered_by: null,
               message: "AI detected high severity incident.",
               severity: "high"
@@ -106,9 +108,15 @@ export const consumeIncidentCreatedEvent = async () => {
         sanitized_snippet: sanitizedSnippet,
       });
 
+      // Backfill incident_id on system_events & alerts created during sanitization
+      await db("system_events")
+        .whereRaw("payload::text LIKE ?", [`%${traceId}%`])
+        .update({ processed: true });
+
       const storedEvent: IncidentStoredEvent = {
         incidentId,
         tempId,
+        traceId,
         source,
         severity,
         sanitizedSnippet,
