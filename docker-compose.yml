@@ -40,8 +40,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       KAFKA_BROKER: ${KAFKA_BROKER}
     depends_on:
-      # postgres:
-      #   condition: service_healthy
+      postgres:
+        condition: service_healthy
       kafka:
         condition: service_healthy
 
@@ -60,8 +60,8 @@ services:
       KAFKA_BROKER: ${KAFKA_BROKER}
       JWT_SECRET: ${JWT_SECRET}
     depends_on:
-      # postgres:
-      #   condition: service_healthy
+      postgres:
+        condition: service_healthy
       kafka:
         condition: service_healthy
       redis:
@@ -80,10 +80,9 @@ services:
       GOOGLE_GENAI_API_KEY: ${GOOGLE_GENAI_API_KEY}
       DATABASE_URL: ${DATABASE_URL}
       KAFKA_BROKER: ${KAFKA_BROKER}
-      ALLOWED_API_KEYS: ${ALLOWED_API_KEYS}
     depends_on:
-      # postgres:
-      #   condition: service_healthy
+      postgres:
+        condition: service_healthy
       kafka:
         condition: service_healthy
 
@@ -100,8 +99,8 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       KAFKA_BROKER: ${KAFKA_BROKER}
     depends_on:
-      # postgres:
-      #   condition: service_healthy
+      postgres:
+        condition: service_healthy
       kafka:
         condition: service_healthy
 
@@ -121,8 +120,8 @@ services:
       KAFKA_BROKER: ${KAFKA_BROKER}
       EMAIL_FROM: ${EMAIL_FROM}
     depends_on:
-      # postgres:
-      #   condition: service_healthy
+      postgres:
+        condition: service_healthy
       kafka:
         condition: service_healthy
 
@@ -179,21 +178,21 @@ services:
       timeout: 3s
       retries: 10
 
-  # postgres:
-  #   networks:
-  #     - app-network
-  #   image: postgres:15
-  #   environment:
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgres
-  #     POSTGRES_DB: postgres
-  #   ports:
-  #     - "5432:5432"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 10
+  postgres:
+    networks:
+      - app-network
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 networks:
   app-network:

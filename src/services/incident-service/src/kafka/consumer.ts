@@ -20,10 +20,7 @@ export const startAIUpdateConsumer = async () => {
       const { incidentId, traceId, summary, root_cause, resolution, confidence } =
         JSON.parse(message.value!.toString()) as IncidentAnalyzedEvent;
 
-      //   await pool.query(
-      //     `UPDATE incidents SET ai_summary = $1, updated_at = NOW() WHERE id = $2`,
-      //     [summary, incidentId]
-      //   );
+
       const [updatedIncident] = await db("incidents")
         .where({ id: incidentId })
         .update({

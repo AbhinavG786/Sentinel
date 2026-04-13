@@ -6,6 +6,7 @@ import firewallRouter from "./routes/firewall.routes";
 import auditRouter from "./routes/audit.routes";
 import statsRouter from "./routes/stats.routes";
 import alertsRouter from "./routes/alerts.routes";
+import projectsRouter from "./routes/projects.routes";
 
 const app = express();
 app.use(cors());
@@ -17,6 +18,7 @@ app.get("/health", (req, res) => {
 
 app.use("/incidents", incidentsRouter);
 app.use("/users", usersRouter);
+app.use("/projects", projectsRouter);
 app.use("/firewall", firewallRouter);
 app.use("/stats", statsRouter);
 app.use("/alerts", alertsRouter);
@@ -24,3 +26,4 @@ app.use("/audit-logs", auditRouter);
 app.use("/policy-logs", auditRouter);
 
 export default app;
+

@@ -15,9 +15,9 @@
     "dev:gateway": "ts-node src/gateway/index.ts",
     "dev:users": "ts-node src/services/user-service/index.ts",
     "dev:incidents": "ts-node src/services/incident-service/index.ts",
-    "migrate:latest": "knex --knexfile knexfile.ts migrate:latest",
-    "migrate:rollback": "knex --knexfile knexfile.ts migrate:rollback",
-    "seed:run": "knex --knexfile knexfile.ts seed:run"
+    "migrate:latest": "knex --knexfile knexfile.root.ts migrate:latest",
+    "migrate:rollback": "knex --knexfile knexfile.root.ts migrate:rollback",
+    "seed:run": "knex --knexfile knexfile.root.ts seed:run"
   },
   "keywords": [],
   "author": "",
