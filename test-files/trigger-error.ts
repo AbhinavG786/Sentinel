@@ -3,12 +3,12 @@ import { Sentinel } from "../packages/sentinel-sdk/dist"; // Assuming it is buil
 
 const sentinel = new Sentinel({
   endpoint: "http://localhost:3000",
-  apiKey: "sk_live_93ef2f381793a8cad1861d604fc1e592d9272df04f88bbf2",
+  apiKey: "XXXXX",
   source: "payment-gateway-service",
 });
 
 sentinel.captureMessage(
-  "Database connection failed while processing transaction. user_email=john@doe.com, stripe_secret=sk_live_1234567890", 
+  "Database connection failed. user_email=john@doe.com, stripe_secret=REDACTED_TEST_KEY", 
   { severity: "critical" }
 );
 
