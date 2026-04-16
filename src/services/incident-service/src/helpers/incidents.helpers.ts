@@ -64,7 +64,7 @@ class IncidentService {
       const safePage = Math.max(1, Math.floor(Number(page) || 1));
       const safeLimit = Math.max(1, Math.floor(Number(limit) || 10));
       const offset = (safePage - 1) * safeLimit;
-      let query = db("incidents").orderBy("created_at", "desc");
+      let query = db("incidents");
       if (status) {
         query = query.andWhere("status", status);
       }
@@ -84,7 +84,7 @@ class IncidentService {
       }
 
       const totalQuery = query.clone().count("* as total").first();
-      const rowsQuery = query.offset(offset).limit(safeLimit).select("*");
+      const rowsQuery = query.clone().orderBy("created_at", "desc").offset(offset).limit(safeLimit).select("*");
 
       const [totalResult, incidents] = await Promise.all([
         totalQuery,
