@@ -1,0 +1,345 @@
+# Sentinel Phase 2: API Endpoints, WebSocket, & SDK
+
+## Goal
+
+Build the missing dashboard-ready API endpoints, add real-time WebSocket event streaming, and create a lightweight `@sentinel/sdk` npm package for client integration.
+
+---
+
+## Phase 1: Missing API Endpoints
+
+### 1.1 Stats Endpoint
+
+> [!NOTE]
+> This provides the dashboard overview — total counts, severity breakdown, avg confidence.
+
+#### [NEW] [stats.helpers.ts](file:///d:/Sentinel/src/services/incident-service/src/helpers/stats.helpers.ts)
+
+Query service that runs aggregate queries on `incidents`, `alerts`, `policy_logs`:
+
+```typescript
+class StatsService {
+  getDashboardStats() → {
+    totalIncidents, openCount, resolvedCount, criticalCount,
+    avgConfidence, totalAlerts, unacknowledgedAlerts,
+    totalPolicyViolations, severityBreakdown: {low, medium, high, critical},
+    recentTrend: [{date, count}]  // last 7 days
+  }
+}
+```
+
+#### [NEW] [stats.controller.ts](file:///d:/Sentinel/src/services/incident-service/src/controllers/stats.controller.ts)
+#### [NEW] [stats.route.ts](file:///d:/Sentinel/src/services/incident-service/src/routes/stats.route.ts)
+#### [MODIFY] [incident-service/server.ts](file:///d:/Sentinel/src/services/incident-service/src/server.ts) — mount `app.use("/stats", statsRouter)`
+
+---
+
+### 1.2 Alerts Endpoint
+
+#### [NEW] [alerts.helpers.ts](file:///d:/Sentinel/src/services/incident-service/src/helpers/alerts.helpers.ts)
+
+```typescript
+class AlertService {
+  getAlerts(filters: { severity?, acknowledged?, page, limit }) → paginated alerts with incident join
+  acknowledgeAlert(id) → UPDATE alerts SET acknowledged = true
+  getAlertById(id) → single alert detail
+}
+```
+
+#### [NEW] [alerts.controller.ts](file:///d:/Sentinel/src/services/incident-service/src/controllers/alerts.controller.ts)
+#### [NEW] [alerts.route.ts](file:///d:/Sentinel/src/services/incident-service/src/routes/alerts.route.ts)
+
+Routes:
+```
+GET    /alerts              → paginated list (filter by severity, acknowledged)
+GET    /alerts/:id          → single alert
+PATCH  /alerts/:id/ack      → acknowledge alert
+```
+
+#### [MODIFY] [incident-service/server.ts](file:///d:/Sentinel/src/services/incident-service/src/server.ts) — mount `app.use("/alerts", authenticate, alertsRouter)`
+
+---
+
+### 1.3 Audit Logs Endpoint
+
+#### [NEW] [audit.helpers.ts](file:///d:/Sentinel/src/services/audit-service/src/helpers/audit.helpers.ts)
+
+```typescript
+class AuditService {
+  getAuditLogs(filters: { entity_type?, action?, page, limit }) → paginated audit_logs
+  getAuditLogsByEntity(entity_id) → timeline for specific incident
+}
+```
+
+#### [NEW] [audit.controller.ts](file:///d:/Sentinel/src/services/audit-service/src/controllers/audit.controller.ts)
+#### [NEW] [audit.route.ts](file:///d:/Sentinel/src/services/audit-service/src/routes/audit.route.ts)
+
+Routes:
+```
+GET  /audit-logs              → paginated list
+GET  /audit-logs/entity/:id   → timeline for specific entity
+```
+
+#### [MODIFY] [audit-service/server.ts](file:///d:/Sentinel/src/services/audit-service/src/server.ts) — mount routes + add auth
+
+---
+
+### 1.4 Policy Logs Endpoint
+
+Add to audit-service (since it already consumes `policy.violation`):
+
+#### [NEW] [policy-logs.helpers.ts](file:///d:/Sentinel/src/services/audit-service/src/helpers/policy-logs.helpers.ts)
+#### [NEW] [policy-logs.controller.ts](file:///d:/Sentinel/src/services/audit-service/src/controllers/policy-logs.controller.ts)
+#### [NEW] [policy-logs.route.ts](file:///d:/Sentinel/src/services/audit-service/src/routes/policy-logs.route.ts)
+
+Routes:
+```
+GET  /policy-logs            → paginated policy violation logs (join with knowledge_policies for policy name)
+```
+
+---
+
+### 1.5 Knowledge Policy CRUD
+
+Add to firewall-service (it owns the sanitization logic):
+
+#### [NEW] [policies.helpers.ts](file:///d:/Sentinel/src/services/firewall-service/src/helpers/policies.helpers.ts)
+
+```typescript
+class PolicyService {
+  getAllPolicies() → SELECT * FROM knowledge_policies
+  createPolicy({ name, description, blocked_keywords, allowed_domains, created_by })
+  updatePolicy(id, updates)
+  deletePolicy(id)
+}
+```
+
+#### [NEW] [policies.controller.ts](file:///d:/Sentinel/src/services/firewall-service/src/controllers/policies.controller.ts)
+#### [NEW] [policies.route.ts](file:///d:/Sentinel/src/services/firewall-service/src/routes/policies.route.ts)
+
+Routes:
+```
+GET    /api/policies          → list all
+POST   /api/policies          → create
+PATCH  /api/policies/:id      → update
+DELETE /api/policies/:id      → delete
+```
+
+#### [MODIFY] [firewall-service/server.ts](file:///d:/Sentinel/src/services/firewall-service/src/server.ts) — mount `app.use("/api", policiesRoutes)`
+
+---
+
+### 1.6 Gateway Proxy Routes for New Endpoints
+
+#### [MODIFY] [gateway/app.ts](file:///d:/Sentinel/src/gateway/src/app.ts) — add new route mounts
+#### [NEW] [gateway/routes/audit.routes.ts](file:///d:/Sentinel/src/gateway/src/routes/audit.routes.ts) — proxy to audit-service
+#### [MODIFY] [gateway/utils/serviceRegistry.ts](file:///d:/Sentinel/src/gateway/src/utils/serviceRegistry.ts) — add `audit` and `notification` entries
+
+New gateway routes:
+```
+/stats/*       → proxy to incident-service
+/alerts/*      → proxy to incident-service (already same service)
+/audit-logs/*  → proxy to audit-service :4003
+/policy-logs/* → proxy to audit-service :4003
+/policies/*    → proxy to firewall-service (via existing /firewall proxy, or new mount)
+```
+
+---
+
+## Phase 2: WebSocket Real-Time Updates
+
+### Architecture
+
+The gateway will host a Socket.io server alongside Express. Services communicate events via Kafka → the gateway's own Kafka consumer picks them up and broadcasts to connected WebSocket clients.
+
+```
+Firewall/Incident Service → Kafka → Gateway Kafka Consumer → Socket.io → Dashboard Client
+```
+
+#### [NEW] [gateway/src/websocket/socketServer.ts](file:///d:/Sentinel/src/gateway/src/websocket/socketServer.ts)
+
+```typescript
+import { Server } from "socket.io";
+import http from "http";
+
+export const initSocketServer = (httpServer: http.Server) => {
+  const io = new Server(httpServer, { cors: { origin: "*" } });
+
+  io.on("connection", (socket) => {
+    console.log(`Dashboard client connected: ${socket.id}`);
+    socket.on("disconnect", () => console.log(`Client disconnected: ${socket.id}`));
+  });
+
+  return io;
+};
+```
+
+#### [NEW] [gateway/src/websocket/realtimeConsumer.ts](file:///d:/Sentinel/src/gateway/src/websocket/realtimeConsumer.ts)
+
+A Kafka consumer in the gateway that subscribes to key topics and emits Socket.io events:
+
+| Kafka Topic | Socket.io Event | Payload |
+|---|---|---|
+| `incident.created` | `incident:created` | `{ tempId, traceId, source, severity }` |
+| `incident.analyzed` | `incident:analyzed` | `{ incidentId, traceId, summary, confidence }` |
+| `alert.created` | `alert:created` | `{ incident_id, severity, message }` |
+| `policy.violation` | `policy:violation` | `{ tempId, traceId, violations[] }` |
+
+#### [MODIFY] [gateway/src/index.ts](file:///d:/Sentinel/src/gateway/src/index.ts)
+
+Change from `app.listen()` to `http.createServer(app)` so Socket.io can attach:
+
+```typescript
+import http from "http";
+import { initSocketServer } from "./websocket/socketServer";
+import { startRealtimeConsumer } from "./websocket/realtimeConsumer";
+
+const server = http.createServer(app);
+const io = initSocketServer(server);
+startRealtimeConsumer(io);  // Kafka → WebSocket bridge
+server.listen(PORT);
+```
+
+#### Dependencies to add to gateway:
+```bash
+npm install socket.io kafkajs
+npm install -D @types/socket.io
+```
+
+---
+
+## Phase 3: `@sentinel/sdk` Package
+
+> [!IMPORTANT]
+> This is published as a standalone npm package clients install. It lives in `packages/sentinel-sdk/`.
+
+### 3.1 Package Structure
+
+```
+packages/sentinel-sdk/
+├── src/
+│   ├── index.ts           # Main export
+│   ├── client.ts          # Core Sentinel client
+│   ├── middleware.ts       # Express error middleware
+│   ├── batch.ts           # Log batcher (buffer + flush)
+│   └── types.ts           # Public types
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+#### [NEW] [packages/sentinel-sdk/src/client.ts](file:///d:/Sentinel/packages/sentinel-sdk/src/client.ts)
+
+```typescript
+export class Sentinel {
+  constructor(options: SentinelOptions) // { endpoint, apiKey, source, batchInterval? }
+
+  captureException(error: Error, meta?: { severity, traceId })  // Manual capture
+  captureMessage(message: string, meta?)                         // Manual log
+  enableAutoCapture()    // process.on('uncaughtException' + 'unhandledRejection')
+  expressErrorHandler()  // Returns Express error middleware
+  flush()                // Force-send buffered logs
+  close()                // Flush + stop intervals
+}
+```
+
+#### [NEW] [packages/sentinel-sdk/src/batch.ts](file:///d:/Sentinel/packages/sentinel-sdk/src/batch.ts)
+
+Batches logs and sends every N seconds or when buffer reaches M items:
+
+```typescript
+class LogBatcher {
+  constructor(endpoint, apiKey, { batchInterval: 5000, maxBatchSize: 10 })
+  add(log: SentinelLog)    // Add to buffer
+  flush()                  // Send batch via HTTP POST
+  stop()                   // Clear interval
+}
+```
+
+#### [NEW] [packages/sentinel-sdk/src/middleware.ts](file:///d:/Sentinel/packages/sentinel-sdk/src/middleware.ts)
+
+```typescript
+// Express error-handling middleware factory
+export const createExpressHandler = (sentinel: Sentinel) => {
+  return (err: Error, req: Request, res: Response, next: NextFunction) => {
+    sentinel.captureException(err, {
+      severity: "high",
+      traceId: req.headers["x-trace-id"] as string,
+    });
+    next(err);
+  };
+};
+```
+
+### 3.2 Auth for SDK
+
+> [!WARNING]
+> Currently the ingest endpoint has no project-level API key auth. The SDK needs a way to authenticate without a user JWT.
+
+**Option A (Simple — recommended for v1):** Add an `X-API-Key` header check in the firewall ingest controller. Store API keys in a new `projects` table or just use env vars.
+
+**Option B (Full):** Create a `projects` table with API keys, rate limits per project, and a project dashboard.
+
+For v1, I recommend Option A — a simple middleware that checks `X-API-Key` against a comma-separated env var `ALLOWED_API_KEYS`.
+
+#### [NEW] [packages/sentinel-sdk/package.json](file:///d:/Sentinel/packages/sentinel-sdk/package.json)
+
+```json
+{
+  "name": "@sentinel/sdk",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "dependencies": {}  // zero runtime dependencies — uses native fetch
+}
+```
+
+### 3.3 Add to workspace
+
+#### [MODIFY] [root package.json](file:///d:/Sentinel/package.json) — add `"packages/sentinel-sdk"` to workspaces (optional, or keep it independent)
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **API Key Auth for SDK**: Should we implement project-level API key auth (Option A: simple env-based) for the ingest endpoint? Without this, anyone who knows your endpoint can send logs.
+
+> [!IMPORTANT]
+> **WebSocket Scope**: Should the gateway Kafka consumer subscribe to ALL topics for real-time streaming, or only the 4 listed (`incident.created`, `incident.analyzed`, `alert.created`, `policy.violation`)?
+
+> [!IMPORTANT]
+> **SDK Scope**: Should `@sentinel/sdk` be a separate npm-publishable package (independent of the monorepo), or part of the monorepo workspace?
+
+---
+
+## Verification Plan
+
+### Automated Tests
+
+1. **Stats endpoint**: `curl localhost:3000/stats` → verify JSON has all expected fields
+2. **Alerts CRUD**: Create incident → wait for alert → `GET /alerts` → `PATCH /alerts/:id/ack` → verify `acknowledged: true`
+3. **Knowledge policy CRUD**: `POST /policies` → `GET /policies` → `PATCH /policies/:id` → `DELETE /policies/:id`
+4. **Audit logs**: Trigger pipeline → `GET /audit-logs` → verify entries exist with correct `traceId`
+5. **WebSocket**: Connect via Socket.io client → ingest log → verify `incident:created` and `incident:analyzed` events received
+6. **SDK**: Install SDK in a test project → `sentinel.captureException(new Error("test"))` → verify log appears in Sentinel
+
+### Manual Verification
+- Test all gateway proxy routes with Postman
+- Verify WebSocket events fire in real-time using a Socket.io test client
+- Test SDK in a real Express app with intentional errors
+
+---
+
+## Execution Order
+
+```
+Phase 1.1 → Stats endpoint (incident-service)
+Phase 1.2 → Alerts endpoint (incident-service)
+Phase 1.3 → Audit logs endpoint (audit-service)
+Phase 1.4 → Policy logs endpoint (audit-service)
+Phase 1.5 → Knowledge policy CRUD (firewall-service)
+Phase 1.6 → Gateway proxy routes for all new endpoints
+Phase 2   → WebSocket (gateway: Socket.io + Kafka consumer)
+Phase 3   → @sentinel/sdk package
+```

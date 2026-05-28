@@ -1,0 +1,34 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy root first
+COPY package.json package-lock.json ./
+
+# ADD THIS: copy your shared package
+COPY packages/shared-utils ./packages/shared-utils
+
+# Copy root tsconfig AFTER shared-utils so it doesn’t override local tsconfig resolution
+COPY tsconfig.json ./
+
+# Copy ONLY what this service needs
+COPY src/services/audit-service ./src/services/audit-service
+
+# Copy service tsconfig if it exists
+COPY src/services/audit-service/tsconfig.json ./src/services/audit-service/tsconfig.json
+
+# Install root + workspace deps so shared-utils becomes a real package
+RUN npm install
+
+# Build shared utils
+RUN npm run build --workspace=packages/shared-utils
+
+# Install deps only for this service
+RUN npm install --workspace=src/services/audit-service
+
+# Build
+RUN npm run build --workspace=src/services/audit-service
+
+EXPOSE 4003
+
+CMD ["node", "src/services/audit-service/dist/server.js"]
