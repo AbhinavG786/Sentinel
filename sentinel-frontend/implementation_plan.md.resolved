@@ -1,0 +1,618 @@
+# Sentinel Frontend — Complete Architecture & Implementation Plan
+
+## Overview
+
+Sentinel is an **AI-powered observability platform with a prompt firewall**. The backend is a fully operational microservices system. This plan defines the complete frontend architecture, tech stack, design philosophy, and page-by-page implementation plan for the Sentinel Dashboard.
+
+---
+
+## Backend State (What's Already Built)
+
+### Available API Endpoints (via Gateway :3000)
+
+| Method | Endpoint | Auth | Service | Description |
+|---|---|---|---|---|
+| `POST` | `/users/register` | None | User :4000 | Register new user |
+| `POST` | `/users/login` | None | User :4000 | Login → JWT token |
+| `GET` | `/users` | Admin | User :4000 | List all users |
+| `GET` | `/users/:id` | JWT | User :4000 | Get user by ID |
+| `PATCH` | `/users/:id` | JWT | User :4000 | Update user |
+| `DELETE` | `/users/:id` | JWT | User :4000 | Delete user |
+| `GET` | `/incidents` | JWT | Incident :4001 | Paginated list (filters: status, severity, search) |
+| `POST` | `/incidents` | JWT | Incident :4001 | Create manual incident |
+| `GET` | `/incidents/:id` | JWT | Incident :4001 | Incident detail + ai_summary |
+| `PATCH` | `/incidents/:id` | JWT | Incident :4001 | Update incident |
+| `DELETE` | `/incidents/:id` | JWT | Incident :4001 | Delete incident |
+| `GET` | `/stats` | None (cached) | Incident :4001 | Dashboard stats |
+| `GET` | `/alerts` | JWT | Incident :4001 | Paginated alerts (filters: severity, acknowledged) |
+| `GET` | `/alerts/:id` | JWT | Incident :4001 | Alert detail |
+| `PATCH` | `/alerts/:id/ack` | JWT | Incident :4001 | Acknowledge alert |
+| `GET` | `/audit-logs` | JWT | Audit :4003 | Paginated audit trail |
+| `GET` | `/audit-logs/entity/:id` | JWT | Audit :4003 | Audit trail for incident |
+| `GET` | `/policy-logs` | JWT | Audit :4003 | Paginated policy violations |
+| `POST` | `/firewall/api/ingest` | JWT | Firewall :4002 | Ingest logs (main pipeline) |
+| `POST` | `/firewall/api/analyze` | JWT | Firewall :4002 | Direct AI test |
+| `GET` | `/firewall/api/policies` | JWT | Firewall :4002 | List knowledge policies |
+| `POST` | `/firewall/api/policies` | JWT | Firewall :4002 | Create policy |
+| `PATCH` | `/firewall/api/policies/:id` | JWT | Firewall :4002 | Update policy |
+| `DELETE` | `/firewall/api/policies/:id` | JWT | Firewall :4002 | Delete policy |
+| `GET` | `/projects` | JWT | User :4000 | List projects |
+
+### Stats API Shape (GET /stats)
+```json
+{
+  "incidents": { "total": 150, "open": 42, "inProgress": 18, "resolved": 78, "closed": 12 },
+  "severity": { "critical": 8, "high": 31, "medium": 60, "low": 51 },
+  "ai": { "analyzedCount": 145, "avgConfidence": 0.847 },
+  "alerts": { "total": 38, "unacknowledged": 12 },
+  "policyViolations": 89,
+  "recentTrend": [{ "date": "2026-04-13", "count": 12 }, ...]
+}
+```
+
+### WebSocket Events (Socket.io at ws://localhost:3000)
+| Client subscribes (emit) | Server emits | Payload |
+|---|---|---|
+| `subscribe:incidents` → room: `incidents` | `incident:created` | `{ tempId, traceId, source, severity, timestamp }` |
+| `subscribe:incidents` | `incident:analyzed` | `{ incidentId, traceId, summary, root_cause, resolution, confidence, analyzedAt }` |
+| `subscribe:alerts` → room: `alerts` | `alert:created` | `{ incident_id, traceId, severity, message }` |
+| `subscribe:policies` → room: `policies` | `policy:violation` | `{ tempId, traceId, violations[], timestamp }` |
+
+---
+
+## System Architecture: Full Stack
+
+```mermaid
+graph TB
+    subgraph "Sentinel Frontend (Next.js)"
+        AUTH_PAGE["Login / Register Page"]
+        DASH["Dashboard Page"]
+        INC_LIST["Incidents List Page"]
+        INC_DETAIL["Incident Detail Page"]
+        ALERTS_PAGE["Alerts Page"]
+        POLICY_PAGE["Policies Page"]
+        AUDIT_PAGE["Audit Trail Page"]
+        SETTINGS["Settings Page"]
+
+        subgraph "State & Data Layer"
+            QUERY["TanStack Query (server state)"]
+            ZUSTAND["Zustand (auth + UI state)"]
+            SOCKET["Socket.io Client (real-time)"]
+        end
+    end
+
+    subgraph "Backend (API Gateway :3000)"
+        GW["Express + Socket.io"]
+        REST["REST API Routes"]
+        WS["WebSocket Server"]
+    end
+
+    AUTH_PAGE --> ZUSTAND
+    DASH --> QUERY
+    INC_LIST --> QUERY
+    INC_DETAIL --> QUERY
+    ALERTS_PAGE --> QUERY
+    POLICY_PAGE --> QUERY
+    AUDIT_PAGE --> QUERY
+
+    QUERY --> REST
+    SOCKET --> WS
+    WS --> KAFKA[["Kafka Topics"]]
+    REST --> SERVICES[["Microservices"]]
+```
+
+---
+
+## Recommended Tech Stack
+
+### Core Framework
+| Choice | Version | Why |
+|---|---|---|
+| **Next.js 15** | App Router | SSR for SEO, server components reduce bundle size, built-in routing, API Routes as BFF layer if needed |
+| **TypeScript** | 5.x | Type safety, matches backend TypeScript conventions |
+| **React** | 19 | Latest with concurrent features |
+
+### UI & Styling
+| Choice | Why |
+|---|---|
+| **Tailwind CSS v4** | Utility-first, perfect for rapid iteration, great dark mode support |
+| **shadcn/ui** | Production-grade headless components (built on Radix UI), dark mode native, fully customizable |
+| **Framer Motion** | Premium animations — page transitions, card reveals, number counters |
+| **Lucide React** | Icon library that pairs perfectly with shadcn |
+
+### Data & State
+| Choice | Why |
+|---|---|
+| **TanStack Query v5** | Server state management, background refetch, optimistic updates, cache invalidation |
+| **Zustand** | Lightweight auth state (`{ user, token, setUser, logout }`), UI state flags, WebSocket subscription state |
+| **Axios** | Consistent HTTP client with interceptors (auto-attach JWT, handle 401) |
+
+### Real-Time
+| Choice | Why |
+|---|---|
+| **Socket.io Client** | Matches backend Socket.io server exactly; auto-reconnect, room subscriptions |
+
+### Charts & Data Visualization
+| Choice | Why |
+|---|---|
+| **Recharts** | React-native, composable, works with SSR |
+| **Tremor** (optional) | Ready-made dashboard chart components built on Recharts |
+
+### Forms & Validation
+| Choice | Why |
+|---|---|
+| **React Hook Form** | Performance, minimal re-renders |
+| **Zod** | Schema validation matching backend validation patterns |
+
+### Developer Experience
+| Choice | Why |
+|---|---|
+| **ESLint + Prettier** | Code quality |
+| **next-themes** | Light/dark mode toggle with zero flash |
+
+---
+
+## Color Palette & Design Language
+
+Sentinel is a **security observability tool** — the design should feel:
+- **Dark-first** (like modern security/devops tools: Grafana, Datadog, PagerDuty)
+- **Data-dense but readable**
+- **Premium and trustworthy**
+
+### Palette
+```
+Background:    #0A0E1A  (deep navy black)
+Surface:       #111827  (dark navy — cards)
+Surface-2:     #1C2333  (slightly lighter — card hover)
+Border:        #2D3748  (muted border)
+Primary:       #6366F1  (indigo — CTAs, active states)
+Primary-glow:  rgba(99,102,241,0.15)  (cards, badges)
+Success:       #10B981  (emerald — resolved, healthy)
+Warning:       #F59E0B  (amber — medium severity, in-progress)
+Danger:        #EF4444  (red — critical, error)
+Danger-glow:   rgba(239, 68, 68, 0.1)
+Text-primary:  #F9FAFB
+Text-secondary:#9CA3AF
+Text-muted:    #6B7280
+```
+
+### Severity Colors
+```
+critical → red-500 (#EF4444) with red glow
+high     → orange-500 (#F97316)
+medium   → yellow-500 (#EAB308)
+low      → blue-400 (#60A5FA)
+```
+
+### Typography
+- **Font**: Inter (Google Fonts) — clean, legible on dark backgrounds
+- **Headings**: `font-bold`, tracking tight
+- **Monospace** (log snippets, traceIds): `JetBrains Mono`
+
+---
+
+## Frontend Application Structure
+
+```
+Sentinel-Frontend/
+├── src/
+│   ├── app/                          # Next.js 15 App Router
+│   │   ├── (auth)/
+│   │   │   ├── login/page.tsx
+│   │   │   └── register/page.tsx
+│   │   ├── (dashboard)/
+│   │   │   ├── layout.tsx            # Sidebar + header shell
+│   │   │   ├── page.tsx              # Dashboard overview
+│   │   │   ├── incidents/
+│   │   │   │   ├── page.tsx          # Incident list
+│   │   │   │   └── [id]/page.tsx     # Incident detail
+│   │   │   ├── alerts/page.tsx
+│   │   │   ├── policies/page.tsx
+│   │   │   ├── audit/page.tsx
+│   │   │   └── settings/page.tsx
+│   │   ├── layout.tsx                # Root layout (providers)
+│   │   └── globals.css
+│   ├── components/
+│   │   ├── ui/                       # shadcn/ui generated components
+│   │   ├── layout/
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── Header.tsx
+│   │   │   └── MobileNav.tsx
+│   │   ├── dashboard/
+│   │   │   ├── StatsCard.tsx         # Animated stat cards
+│   │   │   ├── SeverityChart.tsx     # Donut chart of severity breakdown
+│   │   │   ├── TrendChart.tsx        # Last 7 days area chart
+│   │   │   ├── RecentIncidents.tsx   # Live feed table
+│   │   │   └── AlertsBanner.tsx      # Unacknowledged alerts bar
+│   │   ├── incidents/
+│   │   │   ├── IncidentTable.tsx     # Paginated sortable table
+│   │   │   ├── IncidentFilters.tsx   # Status, severity, search bar
+│   │   │   ├── IncidentCard.tsx      # Card variant for grid view
+│   │   │   ├── AIAnalysisCard.tsx    # Shows ai_summary JSONB data 
+│   │   │   ├── SanitizedLogViewer.tsx # Monospace log with redacted highlights
+│   │   │   ├── AuditTimeline.tsx     # Event timeline for incident
+│   │   │   └── PolicyViolationList.tsx # Violations for incident
+│   │   ├── alerts/
+│   │   │   ├── AlertFeed.tsx
+│   │   │   └── AlertCard.tsx
+│   │   ├── policies/
+│   │   │   ├── PolicyTable.tsx
+│   │   │   ├── PolicyForm.tsx        # Create / Edit modal
+│   │   │   └── PolicyCard.tsx
+│   │   ├── realtime/
+│   │   │   ├── LiveIncidentToast.tsx  # Toast when incident:created
+│   │   │   ├── LiveAlertBadge.tsx     # Animated badge on alerts nav
+│   │   │   └── useWebSocket.ts        # Custom hook with Socket.io
+│   │   └── common/
+│   │       ├── SeverityBadge.tsx
+│   │       ├── StatusBadge.tsx
+│   │       ├── ConfidenceBar.tsx     # AI confidence progress bar
+│   │       ├── LoadingSpinner.tsx
+│   │       ├── EmptyState.tsx
+│   │       └── ErrorBoundary.tsx
+│   ├── lib/
+│   │   ├── api/
+│   │   │   ├── client.ts             # Axios instance w/ interceptors
+│   │   │   ├── incidents.ts          # All /incidents API calls
+│   │   │   ├── alerts.ts             # All /alerts API calls
+│   │   │   ├── stats.ts              # /stats API call
+│   │   │   ├── policies.ts           # /firewall/api/policies
+│   │   │   ├── audit.ts              # /audit-logs, /policy-logs
+│   │   │   └── users.ts              # /users auth + CRUD
+│   │   ├── store/
+│   │   │   ├── authStore.ts          # Zustand: user, token, login/logout
+│   │   │   └── uiStore.ts            # Zustand: sidebar collapsed, theme
+│   │   ├── hooks/
+│   │   │   ├── useStats.ts           # TanStack Query wrapper
+│   │   │   ├── useIncidents.ts
+│   │   │   ├── useIncident.ts
+│   │   │   ├── useAlerts.ts
+│   │   │   ├── usePolicies.ts
+│   │   │   ├── useAuditLogs.ts
+│   │   │   └── useWebSocket.ts       # Socket.io subscription hook
+│   │   ├── types/
+│   │   │   ├── incident.ts
+│   │   │   ├── alert.ts
+│   │   │   ├── policy.ts
+│   │   │   ├── audit.ts
+│   │   │   └── stats.ts
+│   │   └── utils/
+│   │       ├── formatters.ts         # Date, severity, confidence formatters
+│   │       └── constants.ts
+│   └── middleware.ts                  # Next.js middleware for auth redirect
+```
+
+---
+
+## Page-by-Page Specification
+
+### Page 1: Login / Register (`/login`, `/register`)
+**Goal**: Beautiful auth screen with brand identity.
+
+**Components**:
+- Animated logo + tagline ("AI-Powered Observability with a Prompt Firewall")
+- Email / Password form with Zod validation
+- Toggle between Login and Register
+- Error state handling
+
+**API calls**:
+- `POST /users/login` → store JWT + user in Zustand + localStorage
+- `POST /users/register`
+
+**Design**: Full-screen dark background with a glowing indigo radial gradient. Card with glassmorphism effect.
+
+---
+
+### Page 2: Dashboard Overview (`/`)
+**Goal**: Command center — answer "What's happening right now?"
+
+**Sections**:
+1. **Stats Row** — 5 animated count-up cards:
+   - Total Incidents (with delta vs yesterday)
+   - Open Incidents (orange glow when > 0)
+   - Critical Incidents (red pulsing dot when > 0)
+   - Unacknowledged Alerts (red badge)
+   - Avg AI Confidence (% with progress bar)
+
+2. **Charts Row**:
+   - `TrendChart` — 7-day area chart of incident volume
+   - `SeverityChart` — Donut with critical/high/medium/low breakdown
+
+3. **Recent Incidents** — Live-updating table with last 10 incidents  
+   - Real-time: new rows slide in when `incident:created` WS event fires
+
+4. **Active Alerts Banner** — sticky bar at top when unacknowledged alerts exist
+
+**API calls**: `GET /stats`, `GET /incidents?limit=10`, `GET /alerts?acknowledged=false`
+**Real-time**: Subscribe `incidents` + `alerts` rooms
+
+---
+
+### Page 3: Incidents List (`/incidents`)
+**Goal**: Full operational incident management table.
+
+**Components**:
+- `IncidentFilters`: status multi-select, severity multi-select, date range picker, search input
+- `IncidentTable`: columns: ID, title, source, severity badge, status badge, AI confidence bar, created_at, actions
+- Pagination controls
+- **View toggle**: Table ↔ Card grid
+- **Create Incident** button → modal with form
+
+**Real-time**: When `incident:created` fires → toast notification + row appears at top with animation
+
+**API calls**: `GET /incidents` with query params, `POST /incidents`, `DELETE /incidents/:id`
+
+---
+
+### Page 4: Incident Detail (`/incidents/:id`)
+**Goal**: Deep-dive view — the "money page" of the product.
+
+**Layout**: Two-column (2/3 left, 1/3 right)
+
+**Left Column**:
+1. **Header**: Title, severity badge, status badge w/ inline dropdown to change status, source, created_at
+2. **AI Analysis Card** (`AIAnalysisCard`):
+   - Summary (paragraph text)
+   - Root Cause (highlighted block)
+   - Resolution (action items list)
+   - Confidence score with color-coded bar (green >0.8, yellow >0.6, red <0.5)
+   - "Analysis powered by Gemini 2.5 Flash" footer badge
+3. **Sanitized Log Viewer** (`SanitizedLogViewer`):
+   - Monospace code block with syntax-like highlighting
+   - `[REDACTED_EMAIL]`, `[REDACTED_IP]`, etc. highlighted in amber/red badges
+4. **Audit Timeline** (`AuditTimeline`):
+   - Vertical timeline of all audit_logs for this incident
+   - Events: incident_created, ai_summary_updated, status_changed, etc.
+
+**Right Column**:
+1. **Incident Metadata** card (id, traceId, tempId, team, assigned_to)
+2. **Policy Violations** (`PolicyViolationList`):
+   - List each policy that was triggered with violation text
+3. **Related Alerts** card
+4. **Actions**: Edit, Delete buttons
+
+**Real-time**: Subscribe `incidents` room → when `incident:analyzed` fires with this `incidentId`, auto-update `AIAnalysisCard` with animation (card fades in when data arrives)
+
+**API calls**: `GET /incidents/:id`, `GET /audit-logs/entity/:id`, `GET /policy-logs?incident_id=:id`
+
+---
+
+### Page 5: Alerts (`/alerts`)
+**Goal**: Alert management feed with acknowledge workflow.
+
+**Components**:
+- Filter bar: severity, acknowledged status
+- `AlertFeed`: Cards sorted by newest first
+  - Each card: incident source, severity badge, message, timestamp
+  - **Acknowledge button** (green checkmark) → optimistic update via TanStack Query
+  - Unacknowledged → glowing border
+- Pagination
+
+**Real-time**: `alert:created` event → new card flies in at top with bounce animation + browser notification if permission granted
+
+**API calls**: `GET /alerts`, `PATCH /alerts/:id/ack`
+
+---
+
+### Page 6: Knowledge Policies (`/policies`)
+**Goal**: Manage AI firewall sanitization rules.
+
+**Components**:
+- Policy cards with:
+  - Policy name + description
+  - `blocked_keywords` chips (red tags)
+  - `allowed_domains` chips (green tags)
+  - Edit/Delete buttons
+- **Create/Edit Policy Modal** (`PolicyForm`):
+  - Name input
+  - Blocked keywords — chip input (type + Enter to add)
+  - Allowed domains — chip input
+  - Zod validation
+
+**Real-time**: Subscribe `policies` room → `policy:violation` toast counter on this page
+
+**API calls**: `GET /firewall/api/policies`, `POST /firewall/api/policies`, `PATCH /firewall/api/policies/:id`, `DELETE /firewall/api/policies/:id`
+
+---
+
+### Page 7: Audit Trail (`/audit`)
+**Goal**: Compliance view — who did what, when.
+
+**Components**:
+- Filter bar: entity_type, action, date range
+- **Audit log table**: 
+  - columns: action, entity_type, entity_id (linked to incident), user, timestamp, details (expandable JSON)
+- **Policy violations sub-tab**: shows `policy_logs` table
+
+**API calls**: `GET /audit-logs`, `GET /policy-logs`
+
+---
+
+### Page 8: Settings (`/settings`)
+**Goal**: User profile + team management + notification preferences.
+
+**Tabs**:
+1. **Profile** — Update name, email, password
+2. **Team** — View team members, roles
+3. **Notifications** — Toggle Slack/Email alerts (informational, actual config is backend env)
+4. **API Keys** — Show project API key with copy button (for SDK integration)
+
+---
+
+## Real-Time Architecture
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend (Next.js)
+    participant GW as Gateway (:3000)
+    participant K as Kafka
+
+    FE->>GW: socket.connect()
+    FE->>GW: emit("subscribe:incidents")
+    FE->>GW: emit("subscribe:alerts")
+
+    K-->>GW: incident.created event
+    GW-->>FE: emit("incident:created", payload)
+    Note over FE: Toast + table row insert
+
+    K-->>GW: incident.analyzed event
+    GW-->>FE: emit("incident:analyzed", payload)
+    Note over FE: AI card animates in on detail page
+
+    K-->>GW: alert.created event
+    GW-->>FE: emit("alert:created", payload)
+    Note over FE: Alert badge pulses, card insert
+```
+
+### `useWebSocket` Hook Design
+```typescript
+const { isConnected, latestIncident, latestAlert } = useWebSocket({
+  subscriptions: ["incidents", "alerts"], // rooms to join
+  onIncidentCreated: (data) => { /* add to query cache */ },
+  onIncidentAnalyzed: (data) => { /* update incident in cache */ },
+  onAlertCreated: (data) => { /* increment badge, show toast */ },
+  onPolicyViolation: (data) => { /* show violation toast */ },
+})
+```
+
+---
+
+## Data Flow Architecture
+
+```mermaid
+graph LR
+    subgraph "Auth Flow"
+        LOGIN["Login Form"] --> API_LOGIN["POST /users/login"]
+        API_LOGIN --> ZUSTAND["Zustand authStore\n{ user, token }"]
+        ZUSTAND --> AXIOS["Axios interceptor\nAttaches Bearer token"]
+    end
+
+    subgraph "Data Fetching"
+        HOOKS["Custom hooks\n(useIncidents, useAlerts...)"] --> TANSTACK["TanStack Query\nCache + Refetch"]
+        TANSTACK --> AXIOS
+        AXIOS --> GATEWAY["API Gateway :3000"]
+    end
+
+    subgraph "Real-Time"
+        SOCKET_HOOK["useWebSocket hook"] --> SOCKETIO["Socket.io client"]
+        SOCKETIO --> GW_WS["Gateway WebSocket"]
+        GW_WS --> CACHE_UPDATE["queryClient.setQueryData()"]
+    end
+```
+
+---
+
+## Proposed Pages API Map
+
+| Page | GET calls | POST/PATCH/DELETE |
+|---|---|---|
+| `/login` | — | POST /users/login |
+| `/register` | — | POST /users/register |
+| `/` (dashboard) | GET /stats, GET /incidents?limit=10, GET /alerts?acknowledged=false | — |
+| `/incidents` | GET /incidents (paginated) | POST /incidents, DELETE /incidents/:id |
+| `/incidents/:id` | GET /incidents/:id, GET /audit-logs/entity/:id, GET /policy-logs?incident_id=:id | PATCH /incidents/:id |
+| `/alerts` | GET /alerts (paginated) | PATCH /alerts/:id/ack |
+| `/policies` | GET /firewall/api/policies | POST, PATCH, DELETE /firewall/api/policies |
+| `/audit` | GET /audit-logs, GET /policy-logs | — |
+| `/settings` | GET /users/:id | PATCH /users/:id |
+
+---
+
+## Proposed File Implementation Order
+
+```
+Phase 1: Foundation
+├── Create Next.js 15 project with TypeScript + Tailwind CSS v4 + shadcn/ui
+├── Configure next-themes (dark mode)
+├── Create global CSS design tokens (colors, fonts, shadows)
+├── Set up Zustand auth store + Axios interceptors
+├── Create Next.js middleware for auth redirect
+
+Phase 2: Auth Pages
+├── Login page (/login)
+├── Register page (/register)
+└── Auth store integration
+
+Phase 3: Core Layout
+├── Dashboard shell layout with sidebar
+├── Sidebar with navigation links + live alert badge
+├── Header with user dropdown + theme toggle
+└── Mobile responsive nav
+
+Phase 4: Dashboard Overview (/)
+├── StatsCard component (animated count-up)
+├── TrendChart (7-day area chart — Recharts)
+├── SeverityChart (donut — Recharts)
+├── RecentIncidents table
+└── useStats hook + GET /stats
+
+Phase 5: Incidents
+├── IncidentTable with filters, pagination
+├── Incident Detail page
+├── AIAnalysisCard (with animated skeleton → populated)
+├── SanitizedLogViewer (highlighted redactions)
+├── AuditTimeline
+└── PolicyViolationList
+
+Phase 6: Alerts
+├── AlertFeed with acknowledging
+└── Real-time alert:created integration
+
+Phase 7: Policies
+├── PolicyTable / PolicyCard
+└── PolicyForm modal (CRUD)
+
+Phase 8: Audit Trail
+├── AuditLogTable
+└── Policy logs sub-tab
+
+Phase 9: WebSocket Integration
+├── useWebSocket hook
+├── Socket.io provider in layout
+├── Live toast notifications
+├── Real-time cache updates (queryClient injection)
+└── Alert badge counter
+
+Phase 10: Settings & Polish
+├── Settings page (profile, team)
+├── Animations (Framer Motion page transitions)
+├── Error boundaries + 404 page
+└── Loading skeletons throughout
+```
+
+---
+
+## Implementation Notes
+
+> [!IMPORTANT]
+> **Authentication**: JWT is stored in Zustand + `localStorage`. The Axios interceptor reads the token and attaches `Authorization: Bearer <token>` to every request. On 401, auto-redirect to `/login`.
+
+> [!IMPORTANT]
+> **CORS**: The gateway already has CORS enabled (`app.use(cors())`). The frontend can call `http://localhost:3000` directly (or env var `NEXT_PUBLIC_API_URL`).
+
+> [!IMPORTANT]
+> **Policy routes**: Knowledge policies go through `/firewall/*` in the gateway via the `firewallRouter`. The frontend calls `GET /firewall/api/policies`, `POST /firewall/api/policies`, etc.
+
+> [!TIP]
+> **Real-time + TanStack Query**: When a WebSocket event fires, call `queryClient.invalidateQueries({ queryKey: ['incidents'] })` OR use `queryClient.setQueryData()` for instant optimistic updates without re-fetching.
+
+> [!NOTE]
+> **Stats endpoint is public** (no auth) — the gateway stats route does not require `authenticate`. This allows the dashboard to show a preview even before login (could be a landing/teaser).
+
+> [!WARNING]
+> **Firewall routes for policies**: The gateway's `firewall.routes.ts` proxies to `:4002`. Make sure to verify that policies CRUD is mounted and accessible through `GET /firewall/api/policies` before building the policies page.
+
+---
+
+## Verification Plan
+
+1. **Auth flow**: register → login → JWT stored → protected routes accessible → logout clears state
+2. **Dashboard**: `/stats` populates all 5 cards + charts
+3. **Incidents**: pagination, filter by severity, filter by status, search, click to detail
+4. **AI Analysis**: detail page shows ai_summary with confidence bar
+5. **Log viewer**: sanitized snippet rendered with redacted highlights
+6. **Audit timeline**: `/audit-logs/entity/:id` renders as timeline
+7. **Alerts**: list, filter by unacknowledged, click ack → card greys out
+8. **Policies**: create policy, add keyword chip, save → appears in list
+9. **WebSocket**: ingest a log via curl → watch incident:created toast fire on dashboard in ~2s
+10. **Mobile**: responsive layout collapses sidebar on mobile
